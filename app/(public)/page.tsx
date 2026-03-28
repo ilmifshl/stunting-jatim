@@ -26,8 +26,17 @@ const MiniMap = dynamic(() => import('@/components/map/EastJavaMap'), {
   ),
 });
 
+interface StatItem {
+  label: string;
+  value: string;
+  trend?: string | null;
+  icon: any;
+  color: string;
+  bg: string;
+}
+
 export default function Home() {
-  const [stats, setStats] = useState([
+  const [stats, setStats] = useState<StatItem[]>([
     { label: 'Rata-rata Prevalensi', value: '...', trend: null, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
     { label: 'Total Kasus Terdata', value: '...', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Target Penurunan 2024', value: '14.0%', icon: Target, color: 'text-green-600', bg: 'bg-green-50' },

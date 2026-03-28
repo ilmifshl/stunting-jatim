@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
-import { Calendar, ArrowLeft, Clock, User, Share2 } from 'lucide-react';
+import { Calendar, ArrowLeft, Clock, User, Share2, HeartPulse } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function ArticleDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -87,5 +87,3 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
     </div>
   );
 }
-
-import { HeartPulse } from 'lucide-react';

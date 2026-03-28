@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { Search, ChevronLeft, ChevronRight, Info, MapPin, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import type { EastJavaMapProps } from '@/components/map/EastJavaMap';
@@ -16,6 +16,7 @@ const EastJavaMap = dynamic<EastJavaMapProps>(() => import('@/components/map/Eas
 });
 
 import { createClient } from '@/utils/supabase/client';
+import type { ClusterResult } from '@/lib/kmedoids';
 
 export default function MapPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
@@ -29,6 +30,11 @@ export default function MapPage() {
   });
   const [selectedRegion, setSelectedRegion] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+
+  // K-Medoids cluster result for the current year
+  const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
+  const [isClusterLoading, setIsClusterLoading] = useState(false);
+
   // Fetch available years from DB
   useEffect(() => {
     const fetchYears = async () => {
@@ -41,7 +47,6 @@ export default function MapPage() {
       if (data && data.length > 0) {
         const uniqueYears = Array.from(new Set(data.map(d => d.year))).sort((a, b) => a - b);
         setYears(uniqueYears);
-        // Set to most recent if current year is not in the list (though 2024 is the default)
         const latestYear = uniqueYears[uniqueYears.length - 1];
         if (latestYear) setYear(latestYear);
       }
@@ -49,25 +54,42 @@ export default function MapPage() {
     fetchYears();
   }, []);
 
+  // Fetch K-Medoids clustering results whenever year changes
+  useEffect(() => {
+    const fetchClusters = async () => {
+      setIsClusterLoading(true);
+      try {
+        const res = await fetch(`/api/clustering?year=${year}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: ClusterResult & { year: number; totalRegions: number } = await res.json();
+        setClusterResult(data);
+      } catch (err) {
+        console.error('[MapPage] Failed to load cluster data:', err);
+        setClusterResult(null);
+      } finally {
+        setIsClusterLoading(false);
+      }
+    };
+    fetchClusters();
+  }, [year]);
+
   // Map selection handler
-  const handleSelectRegion = (regionName: string) => {
+  const handleSelectRegion = useCallback((regionName: string) => {
     if (selectedRegion?.name === regionName) return;
     setIsDetailLoading(true);
     setSelectedRegion({ name: regionName });
-  };
+  }, [selectedRegion?.name]);
 
   // Fetch detail data when region or year changes
   useEffect(() => {
     if (!selectedRegion?.name) return;
 
     const fetchDetailData = async () => {
-      // Show loading when year changes for existing selection
       setIsDetailLoading(true);
 
       try {
         const supabase = createClient();
 
-        // 1. Get region data with stunting and risk factors
         const { data: regionData, error: regionError } = await supabase
           .from('regions')
           .select(`
@@ -90,22 +112,24 @@ export default function MapPage() {
 
         if (regionError || !regionData) throw regionError || new Error('Region not found');
 
-        // 2. Extract data for current and previous year based on the ACTIVE state year
         const currentStunting = regionData.stunting_data?.find((s: any) => s.year === year);
         const prevStunting = regionData.stunting_data?.find((s: any) => s.year === year - 1);
         const currentFactors = regionData.risk_factors?.find((f: any) => f.year === year);
 
-        // 3. Calculate trend
         let trend = 'tetap';
         if (currentStunting && prevStunting) {
           trend = currentStunting.prevalence > prevStunting.prevalence ? 'naik' : 'turun';
         }
 
+        // Determine cluster label from K-Medoids result
+        const clusterLabel = clusterResult?.clusters?.[regionData.name] ?? null;
+
         setSelectedRegion({
           name: regionData.name,
           prevalence: currentStunting?.prevalence || 0,
           cases: currentStunting?.stunting_cases ?? null,
-          trend: trend,
+          trend,
+          clusterLabel,
           factors: {
             sanitasi: currentFactors?.sanitation || 0,
             air: currentFactors?.clean_water || 0,
@@ -120,7 +144,29 @@ export default function MapPage() {
     };
 
     fetchDetailData();
-  }, [selectedRegion?.name, year]);
+  }, [selectedRegion?.name, year, clusterResult]);
+
+  // Helper: status label + color from K-Medoids cluster label
+  const getStatusDisplay = (clusterLabel: string | null, prevalence: number) => {
+    if (clusterLabel === 'tinggi') return { text: 'Sangat Rawan', color: 'text-red-500' };
+    if (clusterLabel === 'menengah') return { text: 'Cukup Rawan', color: 'text-yellow-600' };
+    if (clusterLabel === 'rendah') return { text: 'Aman', color: 'text-green-600' };
+    // Fallback if no cluster data
+    if (prevalence > 20) return { text: 'Sangat Rawan', color: 'text-red-500' };
+    if (prevalence > 14) return { text: 'Cukup Rawan', color: 'text-yellow-600' };
+    if (prevalence > 0) return { text: 'Aman', color: 'text-green-600' };
+    return { text: 'Belum Ada Data', color: 'text-gray-400' };
+  };
+
+  // Dynamic legend labels from K-Medoids thresholds
+  const thresholds = clusterResult?.thresholds;
+  const legendLabels = {
+    tinggi: thresholds ? `> ${thresholds.menengahMax}%` : '> 20%',
+    menengah: thresholds
+      ? `${thresholds.rendahMax}% – ${thresholds.menengahMax}%`
+      : '14% – 20%',
+    rendah: thresholds ? `< ${thresholds.rendahMax}%` : '< 14%',
+  };
 
   return (
     <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden">
@@ -132,6 +178,7 @@ export default function MapPage() {
           year={year}
           searchQuery={searchQuery}
           prevalenceFilters={prevalenceFilters}
+          clusterData={clusterResult?.clusters ?? null}
         />
       </Suspense>
 
@@ -195,9 +242,21 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* 3. Prevalence Checkboxes */}
+            {/* 3. Prevalence Checkboxes — labels are dynamic from K-Medoids thresholds */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Tingkat Prevalensi</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-gray-700">Tingkat Prevalensi</label>
+                {isClusterLoading && (
+                  <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+              {/* Badge: K-Medoids active */}
+              <div className="mb-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
+                <span className="text-[10px] text-blue-600 font-semibold tracking-wide">
+                  Klasifikasi K-Medoids {clusterResult ? `(${year})` : '— memuat...'}
+                </span>
+              </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
                   <input
@@ -207,8 +266,8 @@ export default function MapPage() {
                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-red-500 rounded-full"></span>
-                    <span className="text-sm text-gray-700">Tinggi (&gt; 20%)</span>
+                    <span className="w-3 h-3 bg-red-500 rounded-full" />
+                    <span className="text-sm text-gray-700">Tinggi ({legendLabels.tinggi})</span>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
@@ -219,8 +278,8 @@ export default function MapPage() {
                     className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-500"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-yellow-400 rounded-full"></span>
-                    <span className="text-sm text-gray-700">Menengah (14% - 20%)</span>
+                    <span className="w-3 h-3 bg-yellow-400 rounded-full" />
+                    <span className="text-sm text-gray-700">Menengah ({legendLabels.menengah})</span>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
@@ -231,34 +290,63 @@ export default function MapPage() {
                     className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                    <span className="text-sm text-gray-700">Rendah (&lt; 14%)</span>
+                    <span className="w-3 h-3 bg-green-500 rounded-full" />
+                    <span className="text-sm text-gray-700">Rendah ({legendLabels.rendah})</span>
                   </div>
                 </label>
               </div>
             </div>
+
+            {/* K-Medoids Medoid Info (collapsible info card) */}
+            {clusterResult?.medoids && (
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Info className="w-3 h-3" /> Nilai Medoid K-Medoids ({year})
+                </p>
+                <div className="space-y-1">
+                  {[
+                    { label: 'Rendah', color: 'bg-green-400', value: clusterResult.medoids[0] },
+                    { label: 'Menengah', color: 'bg-yellow-400', value: clusterResult.medoids[1] },
+                    { label: 'Tinggi', color: 'bg-red-400', value: clusterResult.medoids[2] },
+                  ].map((m) => (
+                    <div key={m.label} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${m.color}`} />
+                        <span className="text-gray-600">{m.label}</span>
+                      </div>
+                      <span className="font-bold text-gray-800">{m.value?.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Floating Bottom Left Legend */}
+      {/* Floating Bottom Left Legend (dynamic) */}
       <div className={`absolute bottom-4 z-[999] bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 flex flex-col gap-2 transition-all duration-300 ${isFilterOpen ? 'left-[352px]' : 'left-4'
         }`}>
         <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-1">Keterangan Prevalensi</h4>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-red-500 rounded-md"></span>
-            <span className="text-xs font-medium text-gray-600">&gt; 20%</span>
+            <span className="w-4 h-4 bg-red-500 rounded-md" />
+            <span className="text-xs font-medium text-gray-600">{legendLabels.tinggi}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-yellow-400 rounded-md"></span>
-            <span className="text-xs font-medium text-gray-600">14% - 20%</span>
+            <span className="w-4 h-4 bg-yellow-400 rounded-md" />
+            <span className="text-xs font-medium text-gray-600">{legendLabels.menengah}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-green-500 rounded-md"></span>
-            <span className="text-xs font-medium text-gray-600">&lt; 14%</span>
+            <span className="w-4 h-4 bg-green-500 rounded-md" />
+            <span className="text-xs font-medium text-gray-600">{legendLabels.rendah}</span>
           </div>
         </div>
+        {clusterResult && (
+          <p className="text-[10px] text-blue-500 font-semibold tracking-wide text-center mt-0.5">
+            ✦ Diklasifikasikan oleh K-Medoids
+          </p>
+        )}
       </div>
 
       {/* Floating Right Panel (Brief Details) */}
@@ -266,7 +354,7 @@ export default function MapPage() {
         <div className="absolute right-4 top-4 bottom-4 z-[1000] w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 p-6 flex flex-col justify-between">
           {isDetailLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-              <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+              <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
               <p className="text-sm font-medium text-gray-400 font-sans">Mengambil Data Wilayah...</p>
             </div>
           ) : (
@@ -294,8 +382,8 @@ export default function MapPage() {
                       </p>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-xs font-bold ${selectedRegion.trend === 'naik' ? 'bg-red-100 text-red-700' :
-                        selectedRegion.trend === 'turun' ? 'bg-green-100 text-green-700' :
-                          'bg-gray-100 text-gray-700'
+                      selectedRegion.trend === 'turun' ? 'bg-green-100 text-green-700' :
+                        'bg-gray-100 text-gray-700'
                       }`}>
                       Trend {selectedRegion.trend === 'naik' ? '↑' : selectedRegion.trend === 'turun' ? '↓' : '—'}
                     </div>
@@ -310,14 +398,30 @@ export default function MapPage() {
                     </div>
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
                       <span className="text-xs text-gray-500">Status</span>
-                      <p className={`text-sm font-bold mt-1 ${selectedRegion.prevalence > 20 ? 'text-red-500' : selectedRegion.prevalence > 14 ? 'text-yellow-600' : selectedRegion.prevalence > 0 ? 'text-green-600' : 'text-gray-400'
-                        }`}>
-                        {selectedRegion.prevalence > 20 ? 'Sangat Rawan' :
-                          selectedRegion.prevalence > 14 ? 'Cukup Rawan' :
-                            selectedRegion.prevalence > 0 ? 'Aman' : 'Belum Ada Data'}
-                      </p>
+                      {(() => {
+                        const status = getStatusDisplay(selectedRegion.clusterLabel, selectedRegion.prevalence);
+                        return (
+                          <p className={`text-sm font-bold mt-1 ${status.color}`}>
+                            {status.text}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
+
+                  {/* Cluster badge */}
+                  {selectedRegion.clusterLabel && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">
+                        K-Medoids Cluster:
+                      </span>
+                      <span className={`text-xs font-bold capitalize ${selectedRegion.clusterLabel === 'tinggi' ? 'text-red-600' :
+                        selectedRegion.clusterLabel === 'menengah' ? 'text-yellow-600' : 'text-green-600'
+                        }`}>
+                        {selectedRegion.clusterLabel}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Factors Snapshot */}
                   <div>
@@ -329,7 +433,7 @@ export default function MapPage() {
                           <span className="font-bold text-gray-900">{selectedRegion.factors?.sanitasi ?? 0}%</span>
                         </div>
                         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.sanitasi ?? 0}%` }}></div>
+                          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.sanitasi ?? 0}%` }} />
                         </div>
                       </div>
                       <div>
@@ -338,7 +442,7 @@ export default function MapPage() {
                           <span className="font-bold text-gray-900">{selectedRegion.factors?.air ?? 0}%</span>
                         </div>
                         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.air ?? 0}%` }}></div>
+                          <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.air ?? 0}%` }} />
                         </div>
                       </div>
                       <div>
@@ -347,7 +451,7 @@ export default function MapPage() {
                           <span className="font-bold text-gray-900">{selectedRegion.factors?.gizi ?? 0}%</span>
                         </div>
                         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.gizi ?? 0}%` }}></div>
+                          <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.gizi ?? 0}%` }} />
                         </div>
                       </div>
                     </div>
