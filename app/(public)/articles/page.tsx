@@ -64,7 +64,7 @@ export default async function ArticlesPage() {
                     </span>
                     <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-md text-blue-500">
                       <Tag className="w-3 h-3" />
-                      Wawasan
+                      {article.category || 'Wawasan'}
                     </span>
                   </div>
 

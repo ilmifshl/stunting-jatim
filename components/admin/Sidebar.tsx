@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, Users, FileText, Settings, LogOut } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -12,55 +12,77 @@ export default function Sidebar() {
   const supabase = createClient();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+    try {
+      await supabase.auth.signOut();
+      toast.success('Berhasil keluar dari panel admin');
+      router.push('/');
+    } catch (err) {
+      toast.error('Gagal keluar, silakan coba lagi');
+    }
   };
 
   const menuItems = [
-    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Data Stunting', path: '/admin/stunting', icon: Users },
-    { name: 'Faktor Risiko', path: '/admin/risk-factors', icon: Settings },
-    { name: 'Artikel', path: '/admin/articles', icon: FileText },
+    { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Data Stunting', href: '/admin/stunting', icon: Users },
+    { name: 'Faktor Risiko', href: '/admin/risk-factors', icon: Settings },
+    { name: 'Manajemen Artikel', href: '/admin/articles', icon: FileText },
   ];
 
   return (
-    <div className="flex flex-col w-64 bg-slate-900 border-r border-slate-800 h-screen fixed top-0 left-0">
-      <div className="h-16 flex items-center px-6 border-b border-slate-800">
-        <span className="text-white text-lg font-bold">Admin Panel</span>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto py-4">
-        <nav className="space-y-1 px-3">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname.startsWith(item.path);
-            
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                className={`
-                  flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
-                  ${isActive 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'}
-                `}
-              >
-                <Icon className="mr-3 flex-shrink-0 h-5 w-5" />
-                {item.name}
-              </Link>
-            );
-          })}
+    <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
+      <div className="flex flex-col h-full">
+        <div className="p-6">
+          <Link href="/admin/dashboard" className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xl">S</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">Stunting Jatim</span>
+          </Link>
+        </div>
+
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+          <div className="pb-4 mb-4 border-b border-gray-100">
+            <p className="px-3 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 mt-6">Main Menu</p>
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center px-3 py-3 text-sm font-bold rounded-[1rem] transition-all group ${isActive
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                  <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div>
+            <p className="px-3 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Public Tools</p>
+            <Link
+              href="/map"
+              target="_blank"
+              className="flex items-center px-3 py-3 text-sm font-bold rounded-[1rem] text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-all group"
+            >
+              <Users className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-900" />
+              Buka Peta Interaktif
+            </Link>
+          </div>
         </nav>
       </div>
-      
-      <div className="flex-shrink-0 border-t border-slate-800 p-4">
+
+      <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 p-4 bg-white/80 backdrop-blur-md">
         <button
           onClick={handleLogout}
-          className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 hover:text-white transition-colors"
+          className="flex items-center w-full px-4 py-3 text-sm font-black text-gray-500 rounded-2xl hover:bg-red-50 hover:text-red-600 transition-all group"
         >
-          <LogOut className="mr-3 flex-shrink-0 h-5 w-5" />
-          Logout
+          <LogOut className="mr-3 h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+          Keluar (Logout)
         </button>
       </div>
     </div>

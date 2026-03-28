@@ -1,6 +1,7 @@
 import Sidebar from '@/components/admin/Sidebar';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { Toaster } from 'sonner';
 
 export default async function AdminLayout({
   children,
@@ -16,6 +17,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      <Toaster position="top-right" richColors />
       <Sidebar />
       <div className="flex-1 ml-64 flex flex-col">
         <main className="flex-1 w-full max-w-7xl mx-auto p-8">
