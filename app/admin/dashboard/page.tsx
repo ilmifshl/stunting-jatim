@@ -11,7 +11,7 @@ export default async function AdminDashboard() {
   const { count: regionCount } = await supabase.from('regions').select('*', { count: 'exact', head: true });
   const { count: articleCount } = await supabase.from('articles').select('*', { count: 'exact', head: true });
   const { count: stuntingCount } = await supabase.from('stunting_data').select('*', { count: 'exact', head: true });
-  const { count: riskCount } = await supabase.from('risk_factors').select('*', { count: 'exact', head: true });
+  const { count: riskCount } = await supabase.from('stunting_factors').select('*', { count: 'exact', head: true });
 
   // 2. Fetch trend data (Avg prevalence per year)
   const { data: trendDataRaw } = await supabase

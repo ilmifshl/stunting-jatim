@@ -50,12 +50,12 @@ export default function Sidebar() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center px-3 py-3 text-sm font-bold rounded-[1rem] transition-all group ${isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                  className={`flex items-center my-2 px-3 py-3 text-sm font-bold rounded-[1rem] transition-all group ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                 >
-                  <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
+                  <Icon className={`mr-4 h-5 w-5 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
                   {item.name}
                 </Link>
               );
@@ -69,7 +69,7 @@ export default function Sidebar() {
               target="_blank"
               className="flex items-center px-3 py-3 text-sm font-bold rounded-[1rem] text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-all group"
             >
-              <Users className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-900" />
+              <Users className="mr-4 h-5 w-5 text-gray-400 group-hover:text-gray-900" />
               Buka Peta Interaktif
             </Link>
           </div>
@@ -81,7 +81,7 @@ export default function Sidebar() {
           onClick={handleLogout}
           className="flex items-center w-full px-4 py-3 text-sm font-black text-gray-500 rounded-2xl hover:bg-red-50 hover:text-red-600 transition-all group"
         >
-          <LogOut className="mr-3 h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+          <LogOut className="mr-4 h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
           Keluar (Logout)
         </button>
       </div>

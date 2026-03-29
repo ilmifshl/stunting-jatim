@@ -24,13 +24,13 @@ export default function AdminTrendChart({ data }: AdminTrendChartProps) {
           dataKey="year" 
           axisLine={false} 
           tickLine={false} 
-          tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }}
+          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
           dy={10}
         />
         <YAxis 
           axisLine={false} 
           tickLine={false} 
-          tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }}
+          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
         />
         <Tooltip 
           contentStyle={{ 

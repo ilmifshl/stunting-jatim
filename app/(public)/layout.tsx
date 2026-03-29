@@ -15,7 +15,7 @@ export default function PublicLayout({
   return (
     <>
       <Navbar />
-      <main className={`flex-1 w-full ${isMapPage ? 'h-[calc(100vh-4rem)] overflow-hidden' : ''}`}>
+      <main className={`flex-1 w-full ${isMapPage && pathname === '/map' ? 'h-[calc(100vh-4rem)] overflow-hidden' : ''}`}>
         {children}
       </main>
       {!isMapPage && <Footer />}

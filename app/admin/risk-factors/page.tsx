@@ -33,8 +33,15 @@ export default function RiskFactorsManagement() {
     setIsLoading(true);
     try {
       const { data: factorData } = await supabase
-        .from('risk_factors')
-        .select('id, year, sanitation, clean_water, mother_education, nutrition_status, region_id, regions(name)');
+        .from('stunting_factors')
+        .select(`
+          id, year, region_id,
+          bblr_count, bblr_rate, imd_count, imd_rate, asi_count, asi_rate,
+          idl_count, idl_rate, vita_count, vita_rate,
+          ttd_count, ttd_rate, catin_count, catin_rate,
+          jamban_count, jamban_rate, stbm_count, stbm_rate,
+          regions(name)
+        `);
       
       const { data: regionsData } = await supabase
         .from('regions')
@@ -106,7 +113,7 @@ export default function RiskFactorsManagement() {
     if (!selectedRecord) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.from('risk_factors').delete().eq('id', selectedRecord.id);
+      const { error } = await supabase.from('stunting_factors').delete().eq('id', selectedRecord.id);
       if (error) throw error;
       toast.success('Data berhasil dihapus');
       fetchData();
@@ -131,7 +138,7 @@ export default function RiskFactorsManagement() {
             <Activity className="w-3 h-3" /> Analisis Determinan
           </div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight uppercase leading-none">Faktor Risiko</h1>
-          <p className="mt-2 text-sm text-gray-500 font-medium">Monitoring skor sanitasi, air bersih, dan edukasi per wilayah.</p>
+          <p className="mt-2 text-sm text-gray-500 font-medium">Monitoring 4 kelompok faktor determinan stunting per wilayah.</p>
         </div>
         <button 
           onClick={() => { setSelectedRecord(null); setIsModalOpen(true); }}
@@ -163,10 +170,10 @@ export default function RiskFactorsManagement() {
                 {[
                   { label: 'Wilayah', key: 'region' },
                   { label: 'Tahun', key: 'year' },
-                  { label: 'Sanitasi', key: 'sanitation' },
-                  { label: 'Air Bersih', key: 'clean_water' },
-                  { label: 'Pendidikan', key: 'mother_education' },
-                  { label: 'Status Gizi', key: 'nutrition_status' },
+                  { label: 'R. Langsung (%)', key: 'bblr_rate' },
+                  { label: 'Pencegahan (%)', key: 'idl_rate' },
+                  { label: 'R. Ibu (%)', key: 'ttd_rate' },
+                  { label: 'Lingkungan (%)', key: 'jamban_rate' },
                 ].map((col) => (
                   <th 
                     key={col.key} 
@@ -201,10 +208,31 @@ export default function RiskFactorsManagement() {
                   <tr key={record.id} className="hover:bg-gray-50/50 transition-all">
                     <td className="whitespace-nowrap px-6 py-5 text-sm font-bold text-gray-900">{record.regions?.name || 'Unknown'}</td>
                     <td className="whitespace-nowrap px-6 py-5 text-sm font-medium text-gray-500">{record.year}</td>
-                    <td className="whitespace-nowrap px-6 py-5 text-sm font-medium text-gray-600">{record.sanitation}%</td>
-                    <td className="whitespace-nowrap px-6 py-5 text-sm font-medium text-gray-600">{record.clean_water}%</td>
-                    <td className="whitespace-nowrap px-6 py-5 text-sm font-medium text-gray-600">{record.mother_education}%</td>
-                    <td className="whitespace-nowrap px-6 py-5 text-sm font-medium text-gray-600">{record.nutrition_status}%</td>
+                    <td className="whitespace-nowrap px-6 py-5 text-xs text-gray-600">
+                      <div className="flex flex-col">
+                        <span>BBLR: {record.bblr_rate}%</span>
+                        <span>IMD: {record.imd_rate}%</span>
+                        <span>ASI: {record.asi_rate}%</span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-5 text-xs text-gray-600">
+                      <div className="flex flex-col">
+                        <span>IDL: {record.idl_rate}%</span>
+                        <span>VitA: {record.vita_rate}%</span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-5 text-xs text-gray-600">
+                      <div className="flex flex-col">
+                        <span>TTD: {record.ttd_rate}%</span>
+                        <span>Catin: {record.catin_rate}%</span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-5 text-xs text-gray-600">
+                      <div className="flex flex-col">
+                        <span>Jamban: {record.jamban_rate}%</span>
+                        <span>STBM: {record.stbm_rate}%</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-5 text-right space-x-2 whitespace-nowrap">
                       <button 
                         onClick={() => { setSelectedRecord(record); setIsModalOpen(true); }}

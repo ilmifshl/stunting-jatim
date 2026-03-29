@@ -100,10 +100,10 @@ export default function MapPage() {
               stunting_cases,
               year
             ),
-            risk_factors (
-              sanitation,
-              clean_water,
-              nutrition_status,
+            stunting_factors (
+              bblr_rate,
+              imd_rate,
+              asi_rate,
               year
             )
           `)
@@ -114,7 +114,15 @@ export default function MapPage() {
 
         const currentStunting = regionData.stunting_data?.find((s: any) => s.year === year);
         const prevStunting = regionData.stunting_data?.find((s: any) => s.year === year - 1);
-        const currentFactors = regionData.risk_factors?.find((f: any) => f.year === year);
+        const currentFactors = regionData.stunting_factors?.find((f: any) => f.year === year);
+
+        let skorLangsung = 0;
+        if (currentFactors) {
+          const bblr = currentFactors.bblr_rate || 0;
+          const imd = currentFactors.imd_rate || 0;
+          const asi = currentFactors.asi_rate || 0;
+          skorLangsung = Math.round((bblr + (100 - imd) + (100 - asi)) / 3);
+        }
 
         let trend = 'tetap';
         if (currentStunting && prevStunting) {
@@ -131,9 +139,9 @@ export default function MapPage() {
           trend,
           clusterLabel,
           factors: {
-            sanitasi: currentFactors?.sanitation || 0,
-            air: currentFactors?.clean_water || 0,
-            gizi: currentFactors?.nutrition_status || 0,
+            bblr: currentFactors?.bblr_rate || 0,
+            imd: currentFactors?.imd_rate || 0,
+            asi: currentFactors?.asi_rate || 0,
           }
         });
       } catch (err) {
@@ -393,7 +401,7 @@ export default function MapPage() {
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
                       <span className="text-xs text-gray-500">Jumlah Kasus</span>
                       <p className="text-xl font-bold text-gray-800">
-                        {selectedRegion.cases !== null ? selectedRegion.cases.toLocaleString() : 'N/A'}
+                        {typeof selectedRegion.cases === 'number' ? selectedRegion.cases.toLocaleString() : 'N/A'}
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
@@ -423,37 +431,27 @@ export default function MapPage() {
                     </div>
                   )}
 
-                  {/* Factors Snapshot */}
                   <div>
-                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Skor Faktor Kritis</h4>
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Faktor Risiko Langsung</h4>
                     <div className="space-y-4 pt-2">
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="text-gray-600 font-medium">Sanitasi Layak</span>
-                          <span className="font-bold text-gray-900">{selectedRegion.factors?.sanitasi ?? 0}%</span>
+                      {[
+                        { label: 'BBLR / Prematur', value: selectedRegion.factors?.bblr, color: 'bg-red-500', reverse: false },
+                        { label: 'Cakupan IMD', value: selectedRegion.factors?.imd, color: 'bg-green-500', reverse: true },
+                        { label: 'ASI Eksklusif', value: selectedRegion.factors?.asi, color: 'bg-blue-500', reverse: true },
+                      ].map((f) => (
+                        <div key={f.label}>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="text-gray-600 font-medium">{f.label}</span>
+                            <span className="font-bold text-gray-900">{f.value ?? 0}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 ${f.color}`} 
+                              style={{ width: `${f.value ?? 0}%` }} 
+                            />
+                          </div>
                         </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.sanitasi ?? 0}%` }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="text-gray-600 font-medium">Akses Air Bersih</span>
-                          <span className="font-bold text-gray-900">{selectedRegion.factors?.air ?? 0}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.air ?? 0}%` }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="text-gray-600 font-medium">Status Gizi (Indeks)</span>
-                          <span className="font-bold text-gray-900">{selectedRegion.factors?.gizi ?? 0}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${selectedRegion.factors?.gizi ?? 0}%` }} />
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
