@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, Info, MapPin, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import type { EastJavaMapProps } from '@/components/map/EastJavaMap';
@@ -31,9 +31,13 @@ export default function MapPage() {
   const [selectedRegion, setSelectedRegion] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
-  // K-Medoids cluster result for the current year
+  // Heatmap View Mode
+  const [viewMode, setViewMode] = useState<'prevalence' | 'direct_risk' | 'prevention_risk'>('prevalence');
+
+  // K-Medoids: one result per active view, with a ref-cache keyed by "year-mode"
   const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
   const [isClusterLoading, setIsClusterLoading] = useState(false);
+  const clusterCacheRef = useRef<Map<string, ClusterResult>>(new Map());
 
   // Fetch available years from DB
   useEffect(() => {
@@ -45,7 +49,7 @@ export default function MapPage() {
         .order('year', { ascending: false });
 
       if (data && data.length > 0) {
-        const uniqueYears = Array.from(new Set(data.map(d => d.year))).sort((a, b) => a - b);
+        const uniqueYears = Array.from(new Set(data.map((d: { year: number }) => d.year))).sort((a, b) => (a as number) - (b as number)) as number[];
         setYears(uniqueYears);
         const latestYear = uniqueYears[uniqueYears.length - 1];
         if (latestYear) setYear(latestYear);
@@ -54,14 +58,22 @@ export default function MapPage() {
     fetchYears();
   }, []);
 
-  // Fetch K-Medoids clustering results whenever year changes
+  // Fetch K-Medoids whenever year or viewMode changes, with ref-cache to avoid re-fetch
   useEffect(() => {
+    const cacheKey = `v4-${year}-${viewMode}`;
+    if (clusterCacheRef.current.has(cacheKey)) {
+      setClusterResult(clusterCacheRef.current.get(cacheKey)!);
+      return;
+    }
+
     const fetchClusters = async () => {
       setIsClusterLoading(true);
+      setClusterResult(null);
       try {
-        const res = await fetch(`/api/clustering?year=${year}`);
+        const res = await fetch(`/api/clustering?year=${year}&mode=${viewMode}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: ClusterResult & { year: number; totalRegions: number } = await res.json();
+        const data: ClusterResult & { year: number; mode: string; totalRegions: number } = await res.json();
+        clusterCacheRef.current.set(cacheKey, data);
         setClusterResult(data);
       } catch (err) {
         console.error('[MapPage] Failed to load cluster data:', err);
@@ -71,7 +83,7 @@ export default function MapPage() {
       }
     };
     fetchClusters();
-  }, [year]);
+  }, [year, viewMode]);
 
   // Map selection handler
   const handleSelectRegion = useCallback((regionName: string) => {
@@ -168,12 +180,13 @@ export default function MapPage() {
 
   // Dynamic legend labels from K-Medoids thresholds
   const thresholds = clusterResult?.thresholds;
+  const unit = viewMode === 'prevalence' ? '%' : '';
   const legendLabels = {
-    tinggi: thresholds ? `> ${thresholds.menengahMax}%` : '> 20%',
+    tinggi: thresholds ? `> ${thresholds.menengahMax}${unit}` : (viewMode === 'prevalence' ? '> 20%' : '> 40'),
     menengah: thresholds
-      ? `${thresholds.rendahMax}% – ${thresholds.menengahMax}%`
-      : '14% – 20%',
-    rendah: thresholds ? `< ${thresholds.rendahMax}%` : '< 14%',
+      ? `${thresholds.rendahMax}${unit} – ${thresholds.menengahMax}${unit}`
+      : (viewMode === 'prevalence' ? '14% – 20%' : '20 – 40'),
+    rendah: thresholds ? `< ${thresholds.rendahMax}${unit}` : (viewMode === 'prevalence' ? '< 14%' : '< 20'),
   };
 
   return (
@@ -187,6 +200,8 @@ export default function MapPage() {
           searchQuery={searchQuery}
           prevalenceFilters={prevalenceFilters}
           clusterData={clusterResult?.clusters ?? null}
+          scores={clusterResult?.scores ?? null}
+          viewMode={viewMode}
         />
       </Suspense>
 
@@ -203,13 +218,13 @@ export default function MapPage() {
           {isFilterOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
         </button>
 
-        <div className="p-5 flex-1 flex flex-col">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="p-5 flex-1 flex flex-col min-h-0">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2 shrink-0">
             <BarChart2 className="w-5 h-5 text-blue-600" />
             Filter Data
           </h2>
 
-          <div className="space-y-6 flex-1 overflow-y-auto pr-1">
+          <div className="space-y-6 flex-1 overflow-y-auto pr-2 pb-2">
             {/* 1. Search Field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Pencarian</label>
@@ -250,10 +265,37 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* 3. Prevalence Checkboxes — labels are dynamic from K-Medoids thresholds */}
+            {/* View Mode Switcher */}
             <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Mode Visualisasi Area</label>
+              <div className="flex bg-gray-100 p-1 rounded-xl mb-4">
+                <button
+                  onClick={() => setViewMode('prevalence')}
+                  className={`flex-1 text-xs font-bold py-2 px-2 rounded-lg transition-all ${viewMode === 'prevalence' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Prevalensi Stunting
+                </button>
+                <button
+                  onClick={() => setViewMode('direct_risk')}
+                  className={`flex-1 text-[10px] font-bold py-2 px-1 rounded-lg transition-all ${viewMode === 'direct_risk' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Risiko Langsung
+                </button>
+                <button
+                  onClick={() => setViewMode('prevention_risk')}
+                  className={`flex-1 text-[10px] font-bold py-2 px-1 rounded-lg transition-all ${viewMode === 'prevention_risk' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Pencegahan
+                </button>
+              </div>
+            </div>
+
+            {/* 3. Prevalence Checkboxes — labels are dynamic from K-Medoids thresholds */}
+            <div className="transition-opacity duration-300">
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-semibold text-gray-700">Tingkat Prevalensi</label>
+                <label className="block text-sm font-semibold text-gray-700">
+                  {viewMode === 'prevalence' ? 'Tingkat Prevalensi' : 'Tingkat Risiko'}
+                </label>
                 {isClusterLoading && (
                   <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 )}
@@ -275,7 +317,9 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-red-500 rounded-full" />
-                    <span className="text-sm text-gray-700">Tinggi ({legendLabels.tinggi})</span>
+                    <span className="text-sm text-gray-700">
+                      Sangat Rawan ({legendLabels.tinggi})
+                    </span>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
@@ -287,7 +331,9 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-yellow-400 rounded-full" />
-                    <span className="text-sm text-gray-700">Menengah ({legendLabels.menengah})</span>
+                    <span className="text-sm text-gray-700">
+                      Cukup Rawan ({legendLabels.menengah})
+                    </span>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
@@ -299,7 +345,9 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-green-500 rounded-full" />
-                    <span className="text-sm text-gray-700">Rendah ({legendLabels.rendah})</span>
+                    <span className="text-sm text-gray-700">
+                      Aman ({legendLabels.rendah})
+                    </span>
                   </div>
                 </label>
               </div>
@@ -307,9 +355,10 @@ export default function MapPage() {
 
             {/* K-Medoids Medoid Info (collapsible info card) */}
             {clusterResult?.medoids && (
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mt-4">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                  <Info className="w-3 h-3" /> Nilai Medoid K-Medoids ({year})
+                  <Info className="w-3 h-3" />
+                  {viewMode === 'prevalence' ? 'Nilai Medoid K-Medoids' : 'Skor Medoid K-Medoids'} ({year})
                 </p>
                 <div className="space-y-1">
                   {[
@@ -322,7 +371,9 @@ export default function MapPage() {
                         <span className={`w-2 h-2 rounded-full ${m.color}`} />
                         <span className="text-gray-600">{m.label}</span>
                       </div>
-                      <span className="font-bold text-gray-800">{m.value?.toFixed(2)}%</span>
+                      <span className="font-bold text-gray-800">
+                        {m.value?.toFixed(2)}{viewMode === 'prevalence' ? '%' : ''}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -335,22 +386,31 @@ export default function MapPage() {
       {/* Floating Bottom Left Legend (dynamic) */}
       <div className={`absolute bottom-4 z-[999] bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 flex flex-col gap-2 transition-all duration-300 ${isFilterOpen ? 'left-[352px]' : 'left-4'
         }`}>
-        <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-1">Keterangan Prevalensi</h4>
+        <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-1">
+          {viewMode === 'prevalence' ? 'Keterangan Prevalensi' : 
+           viewMode === 'direct_risk' ? 'Skor Risiko Langsung' : 'Skor Risiko Pencegahan'}
+        </h4>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-4 bg-red-500 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">{legendLabels.tinggi}</span>
+            <span className="text-xs font-medium text-gray-600">
+              {legendLabels.tinggi}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-4 bg-yellow-400 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">{legendLabels.menengah}</span>
+            <span className="text-xs font-medium text-gray-600">
+              {legendLabels.menengah}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-4 bg-green-500 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">{legendLabels.rendah}</span>
+            <span className="text-xs font-medium text-gray-600">
+              {legendLabels.rendah}
+            </span>
           </div>
         </div>
-        {clusterResult && (
+        {clusterResult && (viewMode === 'prevalence' || viewMode.includes('risk')) && (
           <p className="text-[10px] text-blue-500 font-semibold tracking-wide text-center mt-0.5">
             ✦ Diklasifikasikan oleh K-Medoids
           </p>
@@ -359,15 +419,15 @@ export default function MapPage() {
 
       {/* Floating Right Panel (Brief Details) */}
       {selectedRegion && (
-        <div className="absolute right-4 top-4 bottom-4 z-[1000] w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 p-6 flex flex-col justify-between">
+        <div className="absolute right-4 top-4 bottom-4 z-[1000] w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
           {isDetailLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4 p-6">
               <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
               <p className="text-sm font-medium text-gray-400 font-sans">Mengambil Data Wilayah...</p>
             </div>
           ) : (
             <>
-              <div>
+              <div className="flex-1 overflow-y-auto p-6 pb-4">
                 <div className="flex justify-between items-start">
                   <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
                     <MapPin className="w-6 h-6 text-blue-600" />
@@ -457,7 +517,7 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div className="mt-8">
+              <div className="p-6 pt-4 bg-gray-50 border-t border-gray-100 shrink-0">
                 <Link
                   href={`/map/${encodeURIComponent(selectedRegion.name)}`}
                   className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-md transition-all duration-200"

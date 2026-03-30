@@ -1,15 +1,14 @@
-/**
- * K-Medoids (PAM — Partitioning Around Medoids) implementation
- * Used to dynamically classify stunting prevalence levels per year.
- *
- * Why K-Medoids over K-Means?
- * - Uses actual data points as cluster centers (medoids), not arithmetic means
- * - More robust to outliers in prevalence data
- * - Suitable for non-normally distributed real-world health data
- */
+
 
 export type ClusterLabel = 'tinggi' | 'menengah' | 'rendah';
 
+/** Generic input: region name + any numeric score (prevalence, risk score, etc.) */
+export interface RegionScoreData {
+  regionName: string;
+  score: number;
+}
+
+/** @deprecated Use RegionScoreData instead. Kept for backward compatibility. */
 export interface RegionClusterData {
   regionName: string;
   prevalence: number;
@@ -18,7 +17,9 @@ export interface RegionClusterData {
 export interface ClusterResult {
   /** Maps each region name to its cluster label */
   clusters: Record<string, ClusterLabel>;
-  /** The medoid prevalence value for each cluster */
+  /** Maps each region name to its original numeric score/prevalence */
+  scores: Record<string, number>;
+  /** The medoid value for each cluster */
   medoids: number[];
   /**
    * Dynamic thresholds derived from cluster medoids.
@@ -134,37 +135,26 @@ function kMedoidsPAM(
 // ─────────────────────────────────────────────
 
 /**
- * Classify a list of regions into 3 stunting prevalence clusters
- * using the K-Medoids (PAM) algorithm.
+ * Classify a list of regions into 3 clusters using K-Medoids (PAM).
+ * Works on ANY numeric score — prevalence %, risk score (0–100), etc.
  *
- * The 3 clusters are automatically labeled as:
- * - 'tinggi'   → cluster with the highest medoid prevalence
- * - 'menengah' → cluster with the middle medoid prevalence
- * - 'rendah'   → cluster with the lowest medoid prevalence
+ * - Regions with score === 0 are treated as "no data" and excluded from clustering.
+ * - The cluster with the highest medoid → 'tinggi', middle → 'menengah', lowest → 'rendah'.
  *
- * @param data - Array of { regionName, prevalence } objects
- * @returns ClusterResult with labels, medoids, and dynamic thresholds
+ * @param data  Array of { regionName, score }
+ * @returns     ClusterResult with cluster labels, medoid values, and dynamic thresholds
  */
-export function classifyPrevalenceClusters(data: RegionClusterData[]): ClusterResult {
-  // Filter out regions with no data (prevalence === 0)
-  const validData = data.filter((d) => d.prevalence > 0);
-  const noDataRegions = data.filter((d) => d.prevalence === 0);
-
-  const points = validData.map((d) => d.prevalence);
+export function classifyScoreClusters(data: RegionScoreData[]): ClusterResult {
+  const validData = data.filter((d) => d.score !== null && d.score !== undefined);
+  const points = validData.map((d) => d.score);
   const k = 3;
 
   const { medoidIndices, assignments } = kMedoidsPAM(points, k);
-
-  // Get actual medoid values
   const medoidValues = medoidIndices.map((i) => points[i]);
-
-  // Sort medoid values ascending to label clusters consistently
   const sortedMedoids = [...medoidValues].sort((a, b) => a - b);
-  const rendahMedoid = sortedMedoids[0];
-  const menengahMedoid = sortedMedoids[1];
-  const tinggiMedoid = sortedMedoids[2];
 
-  // Map cluster index → label
+  const [rendahMedoid, menengahMedoid, tinggiMedoid] = sortedMedoids;
+
   const clusterIndexToLabel: Record<number, ClusterLabel> = {};
   medoidValues.forEach((mv, cIdx) => {
     if (mv === rendahMedoid) clusterIndexToLabel[cIdx] = 'rendah';
@@ -172,31 +162,29 @@ export function classifyPrevalenceClusters(data: RegionClusterData[]): ClusterRe
     else clusterIndexToLabel[cIdx] = 'tinggi';
   });
 
-  // Build output clusters map
   const clusters: Record<string, ClusterLabel> = {};
-
+  const scores: Record<string, number> = {};
   validData.forEach((d, i) => {
-    const clusterIdx = assignments[i];
-    clusters[d.regionName] = clusterIndexToLabel[clusterIdx] ?? 'rendah';
+    clusters[d.regionName] = clusterIndexToLabel[assignments[i]] ?? 'rendah';
+    scores[d.regionName] = d.score;
   });
 
-  // Regions with no data get no entry (handled as fallback in frontend)
-  noDataRegions.forEach((d) => {
-    // We explicitly do NOT assign a cluster to no-data regions
-    // They will be rendered grey in the map
-  });
-
-  // Compute dynamic thresholds from cluster boundaries
-  // Use midpoints between adjacent sorted medoids as thresholds
   const rendahMax = parseFloat(((rendahMedoid + menengahMedoid) / 2).toFixed(2));
   const menengahMax = parseFloat(((menengahMedoid + tinggiMedoid) / 2).toFixed(2));
 
   return {
     clusters,
+    scores,
     medoids: [rendahMedoid, menengahMedoid, tinggiMedoid],
-    thresholds: {
-      rendahMax,
-      menengahMax,
-    },
+    thresholds: { rendahMax, menengahMax },
   };
 }
+
+/**
+ * @deprecated Use classifyScoreClusters() with { regionName, score: prevalence } instead.
+ * Kept for backward compatibility with the existing prevalence clustering flow.
+ */
+export function classifyPrevalenceClusters(data: RegionClusterData[]): ClusterResult {
+  return classifyScoreClusters(data.map((d) => ({ regionName: d.regionName, score: d.prevalence })));
+}
+

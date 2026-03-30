@@ -7,6 +7,8 @@ import { createClient } from '@/utils/supabase/client';
 import type { GeoJsonObject } from 'geojson';
 import type { ClusterLabel } from '@/lib/kmedoids';
 
+export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk';
+
 export interface EastJavaMapProps {
   selectedRegion?: string;
   setSelectedRegion?: (name: string) => void;
@@ -16,10 +18,17 @@ export interface EastJavaMapProps {
   isMini?: boolean;
   /**
    * K-Medoids cluster assignment: maps region name → 'tinggi' | 'menengah' | 'rendah'.
-   * When provided, region coloring uses this data instead of hardcoded thresholds.
-   * Pass `null` to fall back to hardcoded thresholds.
+   * Drives ALL coloring logic across all heatmap modes.
+   * Pass `null` to show all regions as grey (no-data state).
    */
   clusterData?: Record<string, ClusterLabel> | null;
+  /**
+   * The actual numeric scores (prevalence or risk score) used for clustering.
+   * Displayed in tooltips.
+   */
+  scores?: Record<string, number> | null;
+  /** Active heatmap mode — determines tooltip label text only. Coloring is always from clusterData. */
+  viewMode?: HeatmapMode;
 }
 
 export default function EastJavaMap({
@@ -30,35 +39,29 @@ export default function EastJavaMap({
   prevalenceFilters = { tinggi: true, menengah: true, rendah: true },
   isMini = false,
   clusterData = null,
+  scores = null,
+  viewMode = 'prevalence',
 }: EastJavaMapProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isYearLoading, setIsYearLoading] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
 
-  // Cache: region geometries (fetched once, never re-fetched)
   const geometryCacheRef = useRef<Map<string, any>>(new Map());
-  // Cache: all stunting data indexed by year then region name
   const stuntingCacheRef = useRef<Map<number, Map<string, { prevalence: number; stunting_cases: number }>>>(new Map());
 
   const center: [number, number] = [-7.5360639, 112.2384017];
 
-  // STEP 1: Fetch GeoJSON once on mount
+  // Fetch GeoJSON once on mount
   useEffect(() => {
     const fetchGeometry = async () => {
       setIsLoading(true);
       try {
         const supabase = createClient();
-        const { data, error } = await supabase
-          .from('regions')
-          .select('name, geojson');
-
+        const { data, error } = await supabase.from('regions').select('name, geojson');
         if (error || !data) throw error || new Error('No geometry data');
-
         data.forEach((item: any) => {
           let geometry = item.geojson;
-          if (typeof geometry === 'string') {
-            try { geometry = JSON.parse(geometry); } catch {}
-          }
+          if (typeof geometry === 'string') { try { geometry = JSON.parse(geometry); } catch {} }
           geometryCacheRef.current.set(item.name, geometry?.geometry || geometry);
         });
         setDataVersion(v => v + 1);
@@ -71,7 +74,7 @@ export default function EastJavaMap({
     fetchGeometry();
   }, []);
 
-  // STEP 2: Handle Data Fetching for Year
+  // Fetch stunting data per year (for tooltip prevalence values)
   useEffect(() => {
     if (isLoading || geometryCacheRef.current.size === 0) return;
     if (stuntingCacheRef.current.has(year)) return;
@@ -82,17 +85,14 @@ export default function EastJavaMap({
         const supabase = createClient();
         const { data, error } = await supabase
           .from('stunting_data')
-          .select(`prevalence, stunting_cases, regions ( name )`)
+          .select('prevalence, stunting_cases, regions ( name )')
           .eq('year', year);
-
         if (error) throw error;
 
         const yearMap = new Map<string, { prevalence: number; stunting_cases: number }>();
         data?.forEach((item: any) => {
           const regionName = item.regions?.name;
-          if (regionName) {
-            yearMap.set(regionName, { prevalence: item.prevalence, stunting_cases: item.stunting_cases });
-          }
+          if (regionName) yearMap.set(regionName, { prevalence: item.prevalence, stunting_cases: item.stunting_cases });
         });
         stuntingCacheRef.current.set(year, yearMap);
         setDataVersion(v => v + 1);
@@ -105,84 +105,62 @@ export default function EastJavaMap({
     fetchStuntingData();
   }, [year, isLoading]);
 
-  // STEP 3: Derived State — triggers re-render when clusterData or any filter changes
+  // Derive GeoJSON features — coloring purely from K-Medoids clusterData
   const geoData = useMemo(() => {
     if (geometryCacheRef.current.size === 0) return null;
-
     const stuntingForYear = stuntingCacheRef.current.get(year);
     if (!stuntingForYear) return null;
 
     const features: any[] = [];
     geometryCacheRef.current.forEach((geometry, name) => {
       const stunting = stuntingForYear.get(name) || { prevalence: 0, stunting_cases: 0 };
-      const prev = stunting.prevalence;
+      const clusterLabel = clusterData?.[name] ?? null;
+      const score = scores?.[name] ?? null;
 
-      const matchSearch = searchQuery ? name.toLowerCase().includes(searchQuery.toLowerCase()) : true;
+      const matchSearch = !searchQuery || name.toLowerCase().includes(searchQuery.toLowerCase());
 
-      // Determine the cluster label for this region
-      // Priority: K-Medoids clusterData → fallback to hardcoded thresholds
-      let clusterLabel: ClusterLabel | null = null;
-      if (clusterData && clusterData[name]) {
-        clusterLabel = clusterData[name];
-      } else if (prev > 0) {
-        // Hardcoded fallback thresholds
-        clusterLabel = prev > 20 ? 'tinggi' : prev >= 14 ? 'menengah' : 'rendah';
-      }
+      // Filter by tier checkboxes
+      let matchFilter = !clusterLabel; // no-data regions always shown (grey)
+      if (clusterLabel === 'tinggi' && prevalenceFilters.tinggi) matchFilter = true;
+      else if (clusterLabel === 'menengah' && prevalenceFilters.menengah) matchFilter = true;
+      else if (clusterLabel === 'rendah' && prevalenceFilters.rendah) matchFilter = true;
 
-      // Filter by prevalence tier checkbox
-      let matchPrevalence = false;
-      if (clusterLabel === 'tinggi' && prevalenceFilters.tinggi) matchPrevalence = true;
-      else if (clusterLabel === 'menengah' && prevalenceFilters.menengah) matchPrevalence = true;
-      else if (clusterLabel === 'rendah' && prevalenceFilters.rendah) matchPrevalence = true;
-      else if (prev === 0) matchPrevalence = true; // No data: always visible (grey)
-
-      if (matchSearch && matchPrevalence) {
+      if (matchSearch && matchFilter) {
         features.push({
           type: 'Feature',
-          properties: { name, prevalence: stunting.prevalence, cases: stunting.stunting_cases, clusterLabel },
+          properties: { name, prevalence: stunting.prevalence, cases: stunting.stunting_cases, clusterLabel, score },
           geometry,
         });
       }
     });
 
     return { type: 'FeatureCollection', features } as GeoJsonObject;
-  }, [year, searchQuery, prevalenceFilters, dataVersion, isLoading, clusterData]);
+  }, [year, searchQuery, prevalenceFilters, dataVersion, isLoading, clusterData, scores]);
+
+  const CLUSTER_COLORS: Record<ClusterLabel, string> = {
+    tinggi: '#ef4444',
+    menengah: '#facc15',
+    rendah: '#22c55e',
+  };
 
   const getStyle = (feature: any) => {
-    const prevalence = feature.properties.prevalence;
-    const cluster: ClusterLabel | null = feature.properties.clusterLabel;
     const isSelected = selectedRegion === feature.properties.name;
-
-    if (prevalence === 0 || !cluster) {
-      return {
-        fillColor: '#94a3b8',
-        weight: isSelected ? 3 : 1,
-        opacity: 1,
-        color: isSelected ? '#2563eb' : 'white',
-        fillOpacity: isSelected ? 0.85 : 0.4,
-      };
-    }
-
-    const fillColor =
-      cluster === 'tinggi' ? '#ef4444' :
-      cluster === 'menengah' ? '#facc15' :
-      '#22c55e';
-
+    const cluster: ClusterLabel | null = feature.properties.clusterLabel;
+    const fillColor = cluster ? CLUSTER_COLORS[cluster] : '#94a3b8';
     return {
       fillColor,
       weight: isSelected ? 3 : 1,
       opacity: 1,
       color: isSelected ? '#2563eb' : 'white',
-      fillOpacity: isSelected ? 0.85 : 0.65,
+      fillOpacity: isSelected ? 0.85 : (cluster ? 0.65 : 0.35),
     };
   };
 
   const onEachFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => {
-        const lyr = e.target;
         if (selectedRegion !== feature.properties.name) {
-          lyr.setStyle({ weight: 2, color: '#60a5fa', fillOpacity: 0.75 });
+          e.target.setStyle({ weight: 2, color: '#60a5fa', fillOpacity: 0.75 });
         }
       },
       mouseout: (e: any) => {
@@ -192,17 +170,37 @@ export default function EastJavaMap({
       },
       click: () => {
         if (setSelectedRegion) setSelectedRegion(feature.properties.name);
-      }
+      },
     });
 
-    const clusterBadge = feature.properties.clusterLabel
-      ? ` &bull; <b class="capitalize">${feature.properties.clusterLabel}</b>`
-      : '';
+    const { prevalence, score: scoreFromProps, clusterLabel } = feature.properties;
+    // Fallback: if score is missing but we're in prevalence mode, use prevalence
+    const actualScore = typeof scoreFromProps === 'number' 
+      ? scoreFromProps 
+      : (viewMode === 'prevalence' ? prevalence : null);
+
+    const clusterBadge = clusterLabel ? ` &bull; <b class="capitalize">${clusterLabel}</b>` : '';
+
+    let modeLabel = 'Prevalensi';
+    let colorClass = 'text-blue-600';
+    let unitTag = '%';
+
+    if (viewMode === 'direct_risk') {
+      modeLabel = 'Skor Risiko Langsung (K-Medoids)';
+      colorClass = 'text-red-600';
+      unitTag = '';
+    } else if (viewMode === 'prevention_risk') {
+      modeLabel = 'Skor Risiko Pencegahan (K-Medoids)';
+      colorClass = 'text-orange-600';
+      unitTag = '';
+    }
+
+    const mainText = `${modeLabel}: <b class="${colorClass}">${actualScore !== null ? actualScore.toFixed(2) + unitTag : 'Tidak ada data'}</b>${clusterBadge}`;
 
     layer.bindTooltip(`
       <div class="p-1.5 font-sans">
         <strong class="text-sm text-gray-900 block border-b pb-1 mb-1">${feature.properties.name} (${year})</strong>
-        <span class="text-xs text-gray-600">Prevalensi: <b class="text-blue-600">${feature.properties.prevalence > 0 ? feature.properties.prevalence + '%' : 'Tidak ada data'}</b>${clusterBadge}</span>
+        <span class="text-xs text-gray-600">${mainText}</span>
       </div>
     `, { sticky: true, className: 'rounded-lg border-none shadow-md bg-white/95 backdrop-blur-sm' });
   };
@@ -239,7 +237,7 @@ export default function EastJavaMap({
         />
         {geoData && (
           <GeoJSON
-            key={`${year}-${searchQuery}-${prevalenceFilters.tinggi}-${prevalenceFilters.menengah}-${prevalenceFilters.rendah}-${selectedRegion || ''}-${dataVersion}-${clusterData ? 'kmedoids' : 'fallback'}`}
+            key={`${year}-${viewMode}-${searchQuery}-${prevalenceFilters.tinggi}-${prevalenceFilters.menengah}-${prevalenceFilters.rendah}-${selectedRegion || ''}-${dataVersion}-${clusterData ? 'kmedoids' : 'nodata'}`}
             data={geoData}
             style={getStyle}
             onEachFeature={onEachFeature}
