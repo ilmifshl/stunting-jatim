@@ -3,11 +3,11 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const data = [
-  { region: 'Kab. Bojonegoro', sanitasi: 65, pendidikan: 55, gizi: 60 },
-  { region: 'Kab. Bangkalan', sanitasi: 40, pendidikan: 45, gizi: 50 },
-  { region: 'Kota Surabaya', sanitasi: 95, pendidikan: 90, gizi: 85 },
-  { region: 'Kab. Malang', sanitasi: 70, pendidikan: 75, gizi: 65 },
-  { region: 'Kab. Jember', sanitasi: 60, pendidikan: 60, gizi: 55 },
+  { region: 'Kab. Bojonegoro', langsung: 65, pencegahan: 80, ibu: 70, sanitasi: 75 },
+  { region: 'Kab. Bangkalan', langsung: 40, pencegahan: 65, ibu: 55, sanitasi: 50 },
+  { region: 'Kota Surabaya', langsung: 92, pencegahan: 95, ibu: 88, sanitasi: 94 },
+  { region: 'Kab. Malang', langsung: 70, pencegahan: 85, ibu: 75, sanitasi: 80 },
+  { region: 'Kab. Jember', langsung: 60, pencegahan: 75, ibu: 65, sanitasi: 70 },
 ];
 
 export default function RiskBarChart() {
@@ -24,16 +24,17 @@ export default function RiskBarChart() {
           }}
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-          <XAxis dataKey="region" tick={{ fill: '#4b5563', fontSize: 12 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: '#4b5563', fontSize: 12 }} axisLine={false} tickLine={false} />
+          <XAxis dataKey="region" tick={{ fill: '#4b5563', fontSize: 10 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: '#4b5563', fontSize: 11 }} axisLine={false} tickLine={false} />
           <Tooltip 
             cursor={{ fill: '#f3f4f6' }}
-            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
           />
-          <Legend wrapperStyle={{ paddingTop: '20px' }} />
-          <Bar dataKey="sanitasi" name="Akses Sanitasi" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="pendidikan" name="Pendidikan Ibu" fill="#10b981" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="gizi" name="Status Gizi" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+          <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
+          <Bar dataKey="langsung" name="Risiko Langsung" fill="#ef4444" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="pencegahan" name="Pencegahan" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="ibu" name="Kesehatan Ibu" fill="#10b981" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="sanitasi" name="Sanitasi" fill="#6366f1" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

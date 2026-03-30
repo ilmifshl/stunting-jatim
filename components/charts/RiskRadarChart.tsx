@@ -3,11 +3,10 @@
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const data = [
-  { factor: 'Akses Sanitasi', value: 75, fullMark: 100 },
-  { factor: 'Air Bersih', value: 85, fullMark: 100 },
-  { factor: 'Pendidikan Ibu', value: 65, fullMark: 100 },
-  { factor: 'Status Gizi', value: 60, fullMark: 100 },
-  { factor: 'Akses Kesehatan', value: 80, fullMark: 100 },
+  { factor: 'Risiko Langsung', value: 65, fullMark: 100 },
+  { factor: 'Pencegahan', value: 82, fullMark: 100 },
+  { factor: 'Status Ibu', value: 70, fullMark: 100 },
+  { factor: 'Sanitasi', value: 78, fullMark: 100 },
 ];
 
 export default function RiskRadarChart() {
