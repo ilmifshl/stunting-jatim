@@ -32,7 +32,7 @@ export default function MapPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // Heatmap View Mode
-  const [viewMode, setViewMode] = useState<'prevalence' | 'direct_risk' | 'prevention_risk'>('prevalence');
+  const [viewMode, setViewMode] = useState<'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk'>('prevalence');
 
   // K-Medoids: one result per active view, with a ref-cache keyed by "year-mode"
   const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
@@ -60,7 +60,7 @@ export default function MapPage() {
 
   // Fetch K-Medoids whenever year or viewMode changes, with ref-cache to avoid re-fetch
   useEffect(() => {
-    const cacheKey = `v4-${year}-${viewMode}`;
+    const cacheKey = `v6-${year}-${viewMode}`;
     if (clusterCacheRef.current.has(cacheKey)) {
       setClusterResult(clusterCacheRef.current.get(cacheKey)!);
       return;
@@ -268,24 +268,42 @@ export default function MapPage() {
             {/* View Mode Switcher */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Mode Visualisasi Area</label>
-              <div className="flex bg-gray-100 p-1 rounded-xl mb-4">
+              <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl mb-4 gap-1">
                 <button
                   onClick={() => setViewMode('prevalence')}
-                  className={`flex-1 text-xs font-bold py-2 px-2 rounded-lg transition-all ${viewMode === 'prevalence' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'prevalence' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  Prevalensi Stunting
+                  Prevalensi
                 </button>
                 <button
                   onClick={() => setViewMode('direct_risk')}
-                  className={`flex-1 text-[10px] font-bold py-2 px-1 rounded-lg transition-all ${viewMode === 'direct_risk' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'direct_risk' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   Risiko Langsung
                 </button>
                 <button
                   onClick={() => setViewMode('prevention_risk')}
-                  className={`flex-1 text-[10px] font-bold py-2 px-1 rounded-lg transition-all ${viewMode === 'prevention_risk' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'prevention_risk' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   Pencegahan
+                </button>
+                <button
+                  onClick={() => setViewMode('maternal_risk')}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'maternal_risk' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Risiko Ibu & Bayi
+                </button>
+                <button
+                  onClick={() => setViewMode('environment_risk')}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'environment_risk' ? 'bg-white text-cyan-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Lingkungan
+                </button>
+                <button
+                  onClick={() => setViewMode('comprehensive_risk')}
+                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'comprehensive_risk' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Komprehensif (Semua)
                 </button>
               </div>
             </div>
@@ -300,12 +318,22 @@ export default function MapPage() {
                   <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 )}
               </div>
-              {/* Badge: K-Medoids active */}
-              <div className="mb-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
-                <span className="text-[10px] text-blue-600 font-semibold tracking-wide">
-                  Klasifikasi K-Medoids {clusterResult ? `(${year})` : '— memuat...'}
-                </span>
+              <div className="mb-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
+                  <span className="text-[10px] text-blue-600 font-semibold tracking-wide">
+                    Klasifikasi K-Medoids {clusterResult ? `(${year})` : '— memuat...'}
+                  </span>
+                </div>
+                {clusterResult && (
+                  <Link 
+                    href={`/map/kmedoids-calculation?year=${year}&mode=${viewMode}`}
+                    className="text-[10px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
+                  >
+                    <Info className="w-2.5 h-2.5" />
+                    Detail
+                  </Link>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
@@ -372,7 +400,14 @@ export default function MapPage() {
                         <span className="text-gray-600">{m.label}</span>
                       </div>
                       <span className="font-bold text-gray-800">
-                        {m.value?.toFixed(2)}{viewMode === 'prevalence' ? '%' : ''}
+                        {(() => {
+                          const val = m.value;
+                          if (Array.isArray(val)) {
+                            return (val.reduce((a, b) => a + b, 0) / val.length).toFixed(1);
+                          }
+                          return typeof val === 'number' ? val.toFixed(1) : '0.0';
+                        })()}
+                        {viewMode === 'prevalence' ? '%' : ''}
                       </span>
                     </div>
                   ))}
@@ -388,7 +423,11 @@ export default function MapPage() {
         }`}>
         <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-1">
           {viewMode === 'prevalence' ? 'Keterangan Prevalensi' : 
-           viewMode === 'direct_risk' ? 'Skor Risiko Langsung' : 'Skor Risiko Pencegahan'}
+           viewMode === 'direct_risk' ? 'Skor Risiko Langsung' : 
+           viewMode === 'prevention_risk' ? 'Skor Risiko Pencegahan' : 
+           viewMode === 'maternal_risk' ? 'Skor Risiko Ibu & Bayi' : 
+           viewMode === 'environment_risk' ? 'Skor Risiko Lingkungan' :
+           'Skor Risiko Komprehensif'}
         </h4>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">

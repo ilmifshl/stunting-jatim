@@ -115,6 +115,12 @@ export default function RiskFactorsPage() {
                 </p>
               </div>
               <div className="pt-4 border-t border-gray-50">
+                <h4 className="font-bold text-gray-900 mb-2">Inisiasi Menyusu Dini (IMD) yang Gagal</h4>
+                <p className="text-sm text-gray-500 leading-relaxed italic">
+                  Pemberian ASI dalam satu jam pertama kelahiran memungkinkan bayi mendapatkan kolostrum yang kaya akan antibodi. Kegagalan IMD menghilangkan proteksi dini ini, membuat bayi lebih rentan terhadap infeksi sejak hari pertama kehidupan.
+                </p>
+              </div>
+              <div className="pt-4 border-t border-gray-50">
                 <h4 className="font-bold text-gray-900 mb-2">Kurangnya ASI Eksklusif</h4>
                 <p className="text-sm text-gray-500 leading-relaxed">
                   ASI adalah benteng pertahanan pertama anak. Tanpa ASI eksklusif selama 6 bulan, bayi kehilangan antibodi alami sehingga lebih mudah sakit. Infeksi yang berulang inilah yang menjadi salah satu pemicu utama stunting.

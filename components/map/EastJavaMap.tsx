@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import type { GeoJsonObject } from 'geojson';
 import type { ClusterLabel } from '@/lib/kmedoids';
 
-export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk';
+export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk';
 
 export interface EastJavaMapProps {
   selectedRegion?: string;
@@ -23,10 +23,10 @@ export interface EastJavaMapProps {
    */
   clusterData?: Record<string, ClusterLabel> | null;
   /**
-   * The actual numeric scores (prevalence or risk score) used for clustering.
+   * The actual numeric scores (prevalence or risk score vector) used for clustering.
    * Displayed in tooltips.
    */
-  scores?: Record<string, number> | null;
+  scores?: Record<string, number | number[]> | null;
   /** Active heatmap mode — determines tooltip label text only. Coloring is always from clusterData. */
   viewMode?: HeatmapMode;
 }
@@ -193,9 +193,28 @@ export default function EastJavaMap({
       modeLabel = 'Skor Risiko Pencegahan (K-Medoids)';
       colorClass = 'text-orange-600';
       unitTag = '';
+    } else if (viewMode === 'maternal_risk') {
+      modeLabel = 'Skor Risiko Ibu & Bayi (K-Medoids)';
+      colorClass = 'text-purple-600';
+      unitTag = '';
+    } else if (viewMode === 'environment_risk') {
+      modeLabel = 'Skor Risiko Lingkungan (K-Medoids)';
+      colorClass = 'text-cyan-600';
+      unitTag = '';
+    } else if (viewMode === 'comprehensive_risk') {
+      modeLabel = 'Skor Risiko Komprehensif (K-Medoids)';
+      colorClass = 'text-indigo-600';
+      unitTag = '';
     }
 
-    const mainText = `${modeLabel}: <b class="${colorClass}">${actualScore !== null ? actualScore.toFixed(2) + unitTag : 'Tidak ada data'}</b>${clusterBadge}`;
+    // Handle vector vs scalar score for display
+    const formattedScore = actualScore !== null 
+      ? (Array.isArray(actualScore) 
+          ? (actualScore.reduce((a, b) => a + b, 0) / actualScore.length).toFixed(2) 
+          : actualScore.toFixed(2)) 
+      : 'Tidak ada data';
+
+    const mainText = `${modeLabel}: <b class="${colorClass}">${formattedScore}${actualScore !== null ? unitTag : ''}</b>${clusterBadge}`;
 
     layer.bindTooltip(`
       <div class="p-1.5 font-sans">
