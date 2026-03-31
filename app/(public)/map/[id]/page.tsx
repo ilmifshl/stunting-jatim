@@ -21,6 +21,8 @@ export default function RegionDetailPage() {
   const [regionData, setRegionData] = useState<any>(null);
   const [stuntingHistory, setStuntingHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [aiStory, setAiStory] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,6 +80,29 @@ export default function RegionDetailPage() {
 
     fetchData();
   }, [regionName]);
+
+  const handleGenerateAiStory = async () => {
+    setIsAiLoading(true);
+    setAiStory(null);
+    try {
+      const response = await fetch('/api/ai/storytelling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regionName, year: activeYear }),
+      });
+      const data = await response.json();
+      if (data.story) {
+        setAiStory(data.story);
+      } else {
+        throw new Error(data.error || 'Gagal mengambil cerita');
+      }
+    } catch (err) {
+      console.error('AI Error:', err);
+      setAiStory('Maaf, saat ini sistem tidak bisa menghasilkan analisis AI. Pastikan API Key sudah terkonfigurasi.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -199,10 +224,10 @@ export default function RegionDetailPage() {
       <div className="max-w-[1400px] mx-auto px-4 py-10 space-y-10">
         {/* Top Overview Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white rounded-[3rem] p-10 border border-slate-200/60 shadow-2xl shadow-blue-900/5 relative overflow-hidden group transition-all hover:shadow-blue-900/10">
+          <div className="lg:col-span-2 bg-white rounded-[3rem] px-8 py-4 border border-slate-200/60 shadow-2xl shadow-blue-900/5 relative overflow-hidden group transition-all hover:shadow-blue-900/10">
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl opacity-50 group-hover:bg-blue-100 transition-colors" />
 
-            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-8 h-full">
+            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
               <div className="flex-1">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 block">Performa Tahun {activeYear}</span>
                 <div className="flex items-baseline gap-4 mt-2">
@@ -217,30 +242,90 @@ export default function RegionDetailPage() {
                     </div>
                   )}
                 </div>
-                <p className="mt-6 text-gray-500 font-medium leading-relaxed max-w-lg">
-                  Wilayah {regionName} menunjukkan prevalensi stunting sebesar {currentStunting?.prevalence}% pada tahun {activeYear}.
-                  {prevalenceDiff && (
-                    prevalenceDiff > 0
-                      ? ` Terjadi peningkatan yang memerlukan intervensi segera.`
-                      : ` Tren positif dengan penurunan kasus yang signifikan.`
-                  )}
-                </p>
               </div>
 
               <div className="w-full md:w-64 h-40 bg-blue-50/40 rounded-[2.5rem] p-6 flex flex-col justify-between border border-blue-100/50 shadow-inner group/card hover:bg-blue-50/60 transition-colors">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-center">
                   <div className="p-3 bg-white rounded-2xl shadow-sm text-blue-600 group-hover/card:scale-110 transition-transform">
                     <Users className="w-6 h-6" />
                   </div>
                   <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1 text-right leading-tight">Total Kasus<br />Terdaftar</span>
                 </div>
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-black text-gray-900 tracking-tighter">
                     {currentStunting?.stunting_cases?.toLocaleString() || 'N/A'}
                   </span>
                   <span className="text-[10px] font-black text-blue-600/60 uppercase">Anak</span>
                 </div>
               </div>
+            </div>
+
+            {/* AI Insight Section - Now inside the same section card, at the bottom tier */}
+            <div className="mt-4 pt-4 border-t border-slate-100 relative">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                <div>
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                    <LayoutDashboard className="w-4 h-4 text-blue-600" />
+                    Analisis Data Storytelling
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Interpretasi Cerdas berbasis AI Terkini</p>
+                </div>
+
+                {!aiStory && !isAiLoading && (
+                  <button
+                    onClick={handleGenerateAiStory}
+                    className="group/btn flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 transform active:scale-95"
+                  >
+                    <Info className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+                    Generate Analisis (Mulai)
+                  </button>
+                )}
+
+                {isAiLoading && (
+                  <div className="flex items-center gap-4 text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-widest animate-pulse">AI sedang merangkai narasi...</span>
+                  </div>
+                )}
+              </div>
+
+              {aiStory && (
+                <div className="bg-gradient-to-br from-slate-50 to-white rounded-[2rem] p-8 border border-slate-100 relative group/ai shadow-inner">
+                  <div className="absolute top-0 right-0 p-6 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[8px] font-black text-emerald-600 uppercase tracking-[0.2em]">Live Insight</span>
+                  </div>
+
+                  <div className="flex gap-6">
+                    <div className="hidden md:flex mt-1">
+                      <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-blue-600 border border-slate-100">
+                        <LayoutDashboard className="w-6 h-6" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base text-slate-700 font-medium leading-relaxed italic md:pr-20">
+                        "{aiStory}"
+                      </p>
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Model: Gemini 2.5 Flash • Bahasa Indonesia</p>
+                        <button
+                          onClick={handleGenerateAiStory}
+                          className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline decoration-2 underline-offset-4 transition-all"
+                        >
+                          Perbarui Analisis
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!aiStory && !isAiLoading && (
+                <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
+                  <Info className="w-10 h-10 text-slate-200 mb-4" />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center">Klik tombol di atas untuk mendapatkan<br />insight data secara otomatis</p>
+                </div>
+              )}
             </div>
           </div>
 
