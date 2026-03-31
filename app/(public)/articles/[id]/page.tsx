@@ -60,7 +60,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
             <img
               src={article.image_url}
               alt={article.title}
-              className="w-full h-auto rounded-sm border border-gray-100"
+              className="w-full h-auto rounded-xl border border-gray-100"
             />
           </div>
         )}

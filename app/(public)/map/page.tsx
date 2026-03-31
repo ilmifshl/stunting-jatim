@@ -68,7 +68,7 @@ export default function MapPage() {
 
     const fetchClusters = async () => {
       setIsClusterLoading(true);
-      setClusterResult(null);
+      // Keep old result while loading for smoother transition
       try {
         const res = await fetch(`/api/clustering?year=${year}&mode=${viewMode}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -178,15 +178,15 @@ export default function MapPage() {
     return { text: 'Belum Ada Data', color: 'text-gray-400' };
   };
 
-  // Dynamic legend labels from K-Medoids thresholds
+  // Dynamic legend labels from K-Medoids thresholds (only for 1D data)
   const thresholds = clusterResult?.thresholds;
   const unit = viewMode === 'prevalence' ? '%' : '';
   const legendLabels = {
-    tinggi: thresholds ? `> ${thresholds.menengahMax}${unit}` : (viewMode === 'prevalence' ? '> 20%' : '> 40'),
+    tinggi: thresholds ? `(> ${thresholds.menengahMax}${unit})` : '',
     menengah: thresholds
-      ? `${thresholds.rendahMax}${unit} – ${thresholds.menengahMax}${unit}`
-      : (viewMode === 'prevalence' ? '14% – 20%' : '20 – 40'),
-    rendah: thresholds ? `< ${thresholds.rendahMax}${unit}` : (viewMode === 'prevalence' ? '< 14%' : '< 20'),
+      ? `(${thresholds.rendahMax}${unit} – ${thresholds.menengahMax}${unit})`
+      : '',
+    rendah: thresholds ? `(< ${thresholds.rendahMax}${unit})` : '',
   };
 
   return (
@@ -204,6 +204,34 @@ export default function MapPage() {
           viewMode={viewMode}
         />
       </Suspense>
+
+      {/* Floating View Mode Switcher (Top Center) */}
+      <div 
+        className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border border-gray-100 transition-all duration-300"
+      >
+        <div className="flex gap-1">
+          {[
+            { id: 'prevalence', label: 'Prevalensi', color: 'text-blue-600', activeBg: 'bg-blue-50' },
+            { id: 'direct_risk', label: 'Risiko Langsung', color: 'text-orange-600', activeBg: 'bg-orange-50' },
+            { id: 'prevention_risk', label: 'Pencegahan', color: 'text-emerald-600', activeBg: 'bg-emerald-50' },
+            { id: 'maternal_risk', label: 'Risiko Ibu & Bayi', color: 'text-purple-600', activeBg: 'bg-purple-50' },
+            { id: 'environment_risk', label: 'Lingkungan', color: 'text-cyan-600', activeBg: 'bg-cyan-50' },
+            { id: 'comprehensive_risk', label: 'Komprehensif (Semua)', color: 'text-indigo-600', activeBg: 'bg-indigo-50' },
+          ].map((modeItem) => (
+            <button
+              key={modeItem.id}
+              onClick={() => setViewMode(modeItem.id as any)}
+              className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all duration-200 whitespace-nowrap ${
+                viewMode === modeItem.id 
+                  ? `${modeItem.activeBg} ${modeItem.color} shadow-sm ring-1 ring-inset ring-gray-100` 
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+              }`}
+            >
+              {modeItem.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Floating Left Panel (Filter) */}
       <div
@@ -265,57 +293,17 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* View Mode Switcher */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Mode Visualisasi Area</label>
-              <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl mb-4 gap-1">
-                <button
-                  onClick={() => setViewMode('prevalence')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'prevalence' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Prevalensi
-                </button>
-                <button
-                  onClick={() => setViewMode('direct_risk')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'direct_risk' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Risiko Langsung
-                </button>
-                <button
-                  onClick={() => setViewMode('prevention_risk')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'prevention_risk' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Pencegahan
-                </button>
-                <button
-                  onClick={() => setViewMode('maternal_risk')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'maternal_risk' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Risiko Ibu & Bayi
-                </button>
-                <button
-                  onClick={() => setViewMode('environment_risk')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'environment_risk' ? 'bg-white text-cyan-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Lingkungan
-                </button>
-                <button
-                  onClick={() => setViewMode('comprehensive_risk')}
-                  className={`flex-auto text-[10px] font-bold py-2 px-1.5 rounded-lg transition-all ${viewMode === 'comprehensive_risk' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Komprehensif (Semua)
-                </button>
-              </div>
-            </div>
-
             {/* 3. Prevalence Checkboxes — labels are dynamic from K-Medoids thresholds */}
             <div className="transition-opacity duration-300">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
                   {viewMode === 'prevalence' ? 'Tingkat Prevalensi' : 'Tingkat Risiko'}
                 </label>
-                {isClusterLoading && (
-                  <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                {(isClusterLoading || isDetailLoading) && (
+                  <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 animate-pulse">
+                    <div className="w-2 h-2 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">Menyelaraskan...</span>
+                  </div>
                 )}
               </div>
               <div className="mb-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between gap-1.5">
@@ -345,8 +333,8 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-red-500 rounded-full" />
-                    <span className="text-sm text-gray-700">
-                      Sangat Rawan ({legendLabels.tinggi})
+                    <span className="text-sm text-gray-700 font-medium">
+                      Sangat Rawan <span className="text-gray-400 font-normal">{legendLabels.tinggi}</span>
                     </span>
                   </div>
                 </label>
@@ -359,8 +347,8 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-yellow-400 rounded-full" />
-                    <span className="text-sm text-gray-700">
-                      Cukup Rawan ({legendLabels.menengah})
+                    <span className="text-sm text-gray-700 font-medium">
+                      Cukup Rawan <span className="text-gray-400 font-normal">{legendLabels.menengah}</span>
                     </span>
                   </div>
                 </label>
@@ -373,8 +361,8 @@ export default function MapPage() {
                   />
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 bg-green-500 rounded-full" />
-                    <span className="text-sm text-gray-700">
-                      Aman ({legendLabels.rendah})
+                    <span className="text-sm text-gray-700 font-medium">
+                      Aman <span className="text-gray-400 font-normal">{legendLabels.rendah}</span>
                     </span>
                   </div>
                 </label>

@@ -2,12 +2,12 @@
 
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  ArrowLeft, 
-  Calculator, 
-  Info, 
-  Table, 
-  Target, 
+import {
+  ArrowLeft,
+  Calculator,
+  Info,
+  Table,
+  Target,
   ArrowRight,
   Sigma,
   Box,
@@ -22,14 +22,14 @@ import type { ClusterResult, ClusterLabel } from '@/lib/kmedoids';
 export default function KMedoidsCalculationPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const year = parseInt(searchParams.get('year') ?? '2024');
   const mode = (searchParams.get('mode') ?? 'prevalence') as 'prevalence' | 'direct_risk' | 'prevention_risk';
-  
+
   const [data, setData] = useState<ClusterResult & { totalRegions: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [selectedSimRegion, setSelectedSimRegion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,6 +68,27 @@ export default function KMedoidsCalculationPage() {
           indicators: ['100 - IDL (%)', '100 - Vitamin A (%)'],
           formula: 'Dist(A, B) = |IDL_A - IDL_B| + |VitA_A - VitA_B|',
           description: 'Mengelompokkan wilayah berdasarkan tingkat risiko kegagalan intervensi preventif.'
+        };
+      case 'maternal_risk':
+        return {
+          title: 'Faktor Risiko Ibu & Bayi',
+          indicators: ['100 - TTD 90 (%)', '100 - Layanan Catin (%)'],
+          formula: 'Dist(A, B) = |TTD_A - TTD_B| + |Catin_A - Catin_B|',
+          description: 'Mengelompokkan wilayah berdasarkan kesehatan ibu hamil dan calon pengantin.'
+        };
+      case 'environment_risk':
+        return {
+          title: 'Faktor Risiko Lingkungan',
+          indicators: ['100 - Jamban Sehat (%)', '100 - SBS/STBM (%)'],
+          formula: 'Dist(A, B) = |Jamban_A - Jamban_B| + |STBM_A - STBM_B|',
+          description: 'Mengelompokkan wilayah berdasarkan ketersediaan sanitasi dan lingkungan sehat.'
+        };
+      case 'comprehensive_risk':
+        return {
+          title: 'Komprehensif (Semua Faktor)',
+          indicators: ['Prev', 'BBLR', 'IMD', 'ASI', 'IDL', 'VitA', 'TTD', 'Catin', 'Jamban', 'STBM'],
+          formula: 'Dist(A, B) = Σ |Indikator_A - Indikator_B| (10 Dimensi)',
+          description: 'Analisis menyeluruh menggabungkan prevalensi stunting dengan seluruh 9 faktor risiko.'
         };
       default:
         return {
@@ -126,23 +147,23 @@ export default function KMedoidsCalculationPage() {
             </div>
           </div>
           <div className="hidden md:flex items-center gap-4">
-             <div className="text-right">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Mode Aktif</p>
-                <p className="text-xs font-black text-gray-800">{modeMetadata.title}</p>
-             </div>
-             <div className="h-8 w-px bg-gray-100" />
-             <div className="text-right">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette Score</p>
-                <p className={`text-xs font-black ${data.silhouetteScore > 0.5 ? 'text-green-600' : 'text-orange-600'}`}>
-                  {data.silhouetteScore.toFixed(4)}
-                </p>
-             </div>
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Mode Aktif</p>
+              <p className="text-xs font-black text-gray-800">{modeMetadata.title}</p>
+            </div>
+            <div className="h-8 w-px bg-gray-100" />
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette Score</p>
+              <p className={`text-xs font-black ${data.silhouetteScore > 0.5 ? 'text-green-600' : 'text-orange-600'}`}>
+                {data.silhouetteScore.toFixed(4)}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 mt-8 space-y-10">
-        
+
         {/* Step 1: Penyiapan Data */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex items-center gap-3 mb-6">
@@ -246,8 +267,8 @@ export default function KMedoidsCalculationPage() {
               <div className="w-full md:w-1/3">
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Pilih Wilayah Simulasi</label>
                 <div className="relative mb-6">
-                  <select 
-                    value={selectedSimRegion || ''} 
+                  <select
+                    value={selectedSimRegion || ''}
                     onChange={(e) => setSelectedSimRegion(e.target.value)}
                     className="w-full appearance-none bg-slate-50 border border-slate-200 text-gray-900 font-black text-sm rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
                   >
@@ -270,16 +291,16 @@ export default function KMedoidsCalculationPage() {
                       </div>
                     </div>
                     <div className="space-y-4">
-                       {modeMetadata.indicators.map((ind, i) => (
-                         <div key={ind} className="flex justify-between items-center text-xs">
-                            <span className="text-gray-500 font-medium">{ind}</span>
-                            <span className="font-black text-gray-800">
-                              {Array.isArray(data.scores[selectedSimRegion]) 
-                                ? (data.scores[selectedSimRegion] as number[])[i] 
-                                : data.scores[selectedSimRegion]}
-                            </span>
-                         </div>
-                       ))}
+                      {modeMetadata.indicators.map((ind, i) => (
+                        <div key={ind} className="flex justify-between items-center text-xs">
+                          <span className="text-gray-500 font-medium">{ind}</span>
+                          <span className="font-black text-gray-800">
+                            {Array.isArray(data.scores[selectedSimRegion])
+                              ? (data.scores[selectedSimRegion] as number[])[i]
+                              : data.scores[selectedSimRegion]}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -292,52 +313,51 @@ export default function KMedoidsCalculationPage() {
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rumus Manhattan Distance</span>
                 </div>
                 <div className="bg-slate-900 text-slate-300 p-6 rounded-2xl font-mono text-sm mb-8 overflow-x-auto">
-                   <div className="text-blue-400 opacity-60 mb-2"># {modeMetadata.formula}</div>
-                   <div className="space-y-4">
-                      {selectedSimRegion && (
-                        ['rendah', 'menengah', 'tinggi'].map((label, idx) => {
-                          const medVector = data.medoids[idx];
-                          const regVector = data.scores[selectedSimRegion];
-                          const distValue = distance(
-                            Array.isArray(regVector) ? regVector : [regVector],
-                            Array.isArray(medVector) ? medVector : [medVector]
-                          );
+                  <div className="text-blue-400 opacity-60 mb-2"># {modeMetadata.formula}</div>
+                  <div className="space-y-4">
+                    {selectedSimRegion && (
+                      ['rendah', 'menengah', 'tinggi'].map((label, idx) => {
+                        const medVector = data.medoids[idx];
+                        const regVector = data.scores[selectedSimRegion];
+                        const distValue = distance(
+                          Array.isArray(regVector) ? regVector : [regVector],
+                          Array.isArray(medVector) ? medVector : [medVector]
+                        );
 
-                          return (
-                            <div key={label} className="flex flex-col gap-1">
-                               <div className="flex items-center gap-2">
-                                  <span className="text-gray-500">Dist to</span>
-                                  <span className="text-white font-bold capitalize">{label}:</span>
-                               </div>
-                               <div className="text-xs overflow-wrap-anywhere">
-                                  Σ |[{Array.isArray(regVector) ? regVector.join(', ') : regVector}] - [{Array.isArray(medVector) ? medVector.join(', ') : medVector}]| = 
-                                  <span className="text-yellow-400 font-bold ml-2">{distValue.toFixed(2)}</span>
-                               </div>
+                        return (
+                          <div key={label} className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">Dist to</span>
+                              <span className="text-white font-bold capitalize">{label}:</span>
                             </div>
-                          )
-                        })
-                      )}
-                   </div>
+                            <div className="text-xs overflow-wrap-anywhere">
+                              Σ |[{Array.isArray(regVector) ? regVector.join(', ') : regVector}] - [{Array.isArray(medVector) ? medVector.join(', ') : medVector}]| =
+                              <span className="text-yellow-400 font-bold ml-2">{distValue.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
                 </div>
 
                 {selectedSimRegion && (
                   <div className="flex items-center gap-4 p-5 bg-blue-50 border border-blue-100 rounded-3xl">
-                     <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-blue-600 shrink-0">
-                        <Box className="w-6 h-6" />
-                     </div>
-                     <div>
-                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Hasil Klasifikasi</p>
-                        <p className="text-sm font-medium text-gray-700 leading-relaxed">
-                          Jarak terendah adalah ke medoid <b className="text-blue-700 capitalize">{data.clusters[selectedSimRegion]}</b>. 
-                          Maka, <b className="text-gray-900">{selectedSimRegion}</b> ditetapkan masuk ke cluster 
-                          <span className={`ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white ${
-                            data.clusters[selectedSimRegion] === 'tinggi' ? 'bg-red-500' : 
+                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-blue-600 shrink-0">
+                      <Box className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Hasil Klasifikasi</p>
+                      <p className="text-sm font-medium text-gray-700 leading-relaxed">
+                        Jarak terendah adalah ke medoid <b className="text-blue-700 capitalize">{data.clusters[selectedSimRegion]}</b>.
+                        Maka, <b className="text-gray-900">{selectedSimRegion}</b> ditetapkan masuk ke cluster
+                        <span className={`ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white ${data.clusters[selectedSimRegion] === 'tinggi' ? 'bg-red-500' :
                             data.clusters[selectedSimRegion] === 'menengah' ? 'bg-yellow-500' : 'bg-green-500'
                           }`}>
-                            {data.clusters[selectedSimRegion]}
-                          </span>
-                        </p>
-                     </div>
+                          {data.clusters[selectedSimRegion]}
+                        </span>
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -347,34 +367,34 @@ export default function KMedoidsCalculationPage() {
 
         {/* Global Stats Footer */}
         <footer className="pt-10 flex flex-col md:flex-row items-center gap-6 justify-between animate-in fade-in slide-in-from-bottom-4 duration-500 delay-500">
-           <div className="flex items-center gap-6">
-              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
-                 <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-                    <Sigma className="w-6 h-6" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase">Avg Cluster Silhouette</p>
-                    <p className="text-xl font-black text-gray-900">{data.silhouetteScore.toFixed(4)}</p>
-                 </div>
+          <div className="flex items-center gap-6">
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                <Sigma className="w-6 h-6" />
               </div>
-              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
-                 <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-                    <LayoutDashboard className="w-6 h-6" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase">Total Entitas</p>
-                    <p className="text-xl font-black text-gray-900">{data.totalRegions} Wilayah</p>
-                 </div>
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase">Avg Cluster Silhouette</p>
+                <p className="text-xl font-black text-gray-900">{data.silhouetteScore.toFixed(4)}</p>
               </div>
-           </div>
-           
-           <Link 
-            href="/map" 
+            </div>
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+                <LayoutDashboard className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase">Total Entitas</p>
+                <p className="text-xl font-black text-gray-900">{data.totalRegions} Wilayah</p>
+              </div>
+            </div>
+          </div>
+
+          <Link
+            href="/map"
             className="group flex items-center gap-3 bg-gray-900 text-white px-8 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-gray-200 hover:shadow-blue-200"
           >
-             Selesai & Tutup
-             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-           </Link>
+            Selesai & Tutup
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
         </footer>
 
       </div>

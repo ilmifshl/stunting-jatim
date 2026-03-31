@@ -127,7 +127,7 @@ export default function RegionDetailPage() {
     {
       title: 'Faktor Pencegahan',
       icon: ShieldCheck,
-      color: 'blue',
+      color: 'orange',
       description: 'Upaya preventif melalui imunisasi dan suplementasi.',
       items: [
         { label: 'Imunisasi Dasar Lengkap', count: currentFactors?.idl_count, rate: currentFactors?.idl_rate, unit: '% Bayi' },
@@ -286,8 +286,12 @@ export default function RegionDetailPage() {
                         <div className="flex justify-between items-center mb-3">
                           <span className="text-sm font-bold text-gray-600">{item.label}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-gray-900 italic tracking-widest underline decoration-blue-200 underline-offset-4 decoration-2">{item.rate ?? 0}%</span>
-                            <span className="text-[9px] font-bold text-gray-300 uppercase">{item.unit}</span>
+                            <span className="text-xs font-black text-gray-900 italic tracking-widest underline decoration-blue-200 underline-offset-4 decoration-2">
+                              {item.count?.toLocaleString() || 0}
+                            </span>
+                            <span className="text-[9px] font-bold text-gray-500 uppercase">
+                              {item.unit.replace('% ', '')}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -298,7 +302,7 @@ export default function RegionDetailPage() {
                             ></div>
                           </div>
                           <div className="text-[10px] font-black text-slate-600 bg-slate-100/80 px-3 py-1.5 rounded-xl tabular-nums border border-slate-200/50">
-                            {item.count?.toLocaleString() || 0}
+                            {item.rate ?? 0}%
                           </div>
                         </div>
                       </div>
