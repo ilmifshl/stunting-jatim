@@ -67,13 +67,16 @@ export default function MapPage() {
     }
 
     const fetchClusters = async () => {
+      const startTime = performance.now();
       setIsClusterLoading(true);
       // Keep old result while loading for smoother transition
       try {
         const res = await fetch(`/api/clustering?year=${year}&mode=${viewMode}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw Error(`HTTP ${res.status}`);
         const data: ClusterResult & { year: number; mode: string; totalRegions: number } = await res.json();
         clusterCacheRef.current.set(cacheKey, data);
+        const duration = performance.now() - startTime;
+        console.log(`[MapPage] 🕒 Clustering API (${viewMode}, ${year}): ${duration.toFixed(2)}ms`);
         setClusterResult(data);
       } catch (err) {
         console.error('[MapPage] Failed to load cluster data:', err);

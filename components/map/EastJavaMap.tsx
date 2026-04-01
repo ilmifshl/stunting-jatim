@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { getCachedGeometry, setCachedGeometry } from '@/utils/db-cache';
 import type { GeoJsonObject } from 'geojson';
 import type { ClusterLabel } from '@/lib/kmedoids';
 
@@ -48,22 +49,55 @@ export default function EastJavaMap({
 
   const geometryCacheRef = useRef<Map<string, any>>(new Map());
   const stuntingCacheRef = useRef<Map<number, Map<string, { prevalence: number; stunting_cases: number }>>>(new Map());
+  const selectedRegionRef = useRef(selectedRegion);
+  const geoJsonRef = useRef<any>(null);
+
+  useEffect(() => {
+    selectedRegionRef.current = selectedRegion;
+  }, [selectedRegion]);
 
   const center: [number, number] = [-7.5360639, 112.2384017];
 
   // Fetch GeoJSON once on mount
   useEffect(() => {
     const fetchGeometry = async () => {
+      const startTime = performance.now();
       setIsLoading(true);
+
       try {
+        // Try to load from IndexedDB first
+        const cached = await getCachedGeometry('east-java-geometries');
+        if (cached && Object.keys(cached).length > 0) {
+          console.log('[EastJavaMap] 📦 Using Cached Geometries');
+          Object.entries(cached).forEach(([name, geometry]) => {
+            geometryCacheRef.current.set(name, geometry);
+          });
+          const duration = performance.now() - startTime;
+          console.log(`[EastJavaMap] 🕒 Cached Geometry Load: ${duration.toFixed(2)}ms`);
+          setDataVersion(v => v + 1);
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('[EastJavaMap] 🌐 Fetching Geometries from Supabase...');
         const supabase = createClient();
         const { data, error } = await supabase.from('regions').select('name, geojson');
         if (error || !data) throw error || new Error('No geometry data');
+
+        const cacheObj: Record<string, any> = {};
         data.forEach((item: any) => {
           let geometry = item.geojson;
           if (typeof geometry === 'string') { try { geometry = JSON.parse(geometry); } catch {} }
-          geometryCacheRef.current.set(item.name, geometry?.geometry || geometry);
+          const geo = geometry?.geometry || geometry;
+          geometryCacheRef.current.set(item.name, geo);
+          cacheObj[item.name] = geo;
         });
+
+        // Store in IndexedDB for next time
+        await setCachedGeometry('east-java-geometries', cacheObj);
+
+        const duration = performance.now() - startTime;
+        console.log(`[EastJavaMap] 🕒 Geometry Fetch (Supabase): ${duration.toFixed(2)}ms`);
         setDataVersion(v => v + 1);
       } catch (err) {
         console.error('Error fetching geometries:', err);
@@ -80,6 +114,7 @@ export default function EastJavaMap({
     if (stuntingCacheRef.current.has(year)) return;
 
     const fetchStuntingData = async () => {
+      const startTime = performance.now();
       setIsYearLoading(true);
       try {
         const supabase = createClient();
@@ -88,13 +123,15 @@ export default function EastJavaMap({
           .select('prevalence, stunting_cases, regions ( name )')
           .eq('year', year);
         if (error) throw error;
-
+  
         const yearMap = new Map<string, { prevalence: number; stunting_cases: number }>();
         data?.forEach((item: any) => {
           const regionName = item.regions?.name;
           if (regionName) yearMap.set(regionName, { prevalence: item.prevalence, stunting_cases: item.stunting_cases });
         });
         stuntingCacheRef.current.set(year, yearMap);
+        const duration = performance.now() - startTime;
+        console.log(`[EastJavaMap] 🕒 Stunting Data Fetch (${year}): ${duration.toFixed(2)}ms`);
         setDataVersion(v => v + 1);
       } catch (err) {
         console.error('Error fetching stunting data:', err);
@@ -107,6 +144,7 @@ export default function EastJavaMap({
 
   // Derive GeoJSON features — coloring purely from K-Medoids clusterData
   const geoData = useMemo(() => {
+    const startTime = performance.now();
     if (geometryCacheRef.current.size === 0) return null;
     const stuntingForYear = stuntingCacheRef.current.get(year);
     if (!stuntingForYear) return null;
@@ -134,7 +172,10 @@ export default function EastJavaMap({
       }
     });
 
-    return { type: 'FeatureCollection', features } as GeoJsonObject;
+    const result = { type: 'FeatureCollection', features } as GeoJsonObject;
+    const duration = performance.now() - startTime;
+    console.log(`[EastJavaMap] 🕒 GeoJSON Processing: ${duration.toFixed(2)}ms`);
+    return result;
   }, [year, searchQuery, prevalenceFilters, dataVersion, isLoading, clusterData, scores]);
 
   const CLUSTER_COLORS: Record<ClusterLabel, string> = {
@@ -144,7 +185,7 @@ export default function EastJavaMap({
   };
 
   const getStyle = (feature: any) => {
-    const isSelected = selectedRegion === feature.properties.name;
+    const isSelected = selectedRegionRef.current === feature.properties.name;
     const cluster: ClusterLabel | null = feature.properties.clusterLabel;
     const fillColor = cluster ? CLUSTER_COLORS[cluster] : '#94a3b8';
     return {
@@ -156,15 +197,26 @@ export default function EastJavaMap({
     };
   };
 
+  // Sync styles manually when selectedRegion changes to prevent full GeoJSON remounts
+  useEffect(() => {
+    if (geoJsonRef.current) {
+      geoJsonRef.current.eachLayer((layer: any) => {
+        if (layer.feature) {
+          layer.setStyle(getStyle(layer.feature));
+        }
+      });
+    }
+  }, [selectedRegion]);
+
   const onEachFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => {
-        if (selectedRegion !== feature.properties.name) {
+        if (selectedRegionRef.current !== feature.properties.name) {
           e.target.setStyle({ weight: 2, color: '#60a5fa', fillOpacity: 0.75 });
         }
       },
       mouseout: (e: any) => {
-        if (selectedRegion !== feature.properties.name) {
+        if (selectedRegionRef.current !== feature.properties.name) {
           e.target.setStyle(getStyle(feature));
         }
       },
@@ -256,7 +308,8 @@ export default function EastJavaMap({
         />
         {geoData && (
           <GeoJSON
-            key={`${year}-${viewMode}-${searchQuery}-${prevalenceFilters.tinggi}-${prevalenceFilters.menengah}-${prevalenceFilters.rendah}-${selectedRegion || ''}-${dataVersion}-${clusterData ? 'kmedoids' : 'nodata'}`}
+            ref={geoJsonRef}
+            key={`${year}-${viewMode}-${searchQuery}-${prevalenceFilters.tinggi}-${prevalenceFilters.menengah}-${prevalenceFilters.rendah}-${dataVersion}-${clusterData ? JSON.stringify(clusterData).length : 'nodata'}`}
             data={geoData}
             style={getStyle}
             onEachFeature={onEachFeature}
