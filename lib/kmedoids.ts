@@ -1,6 +1,4 @@
-
-
-export type ClusterLabel = 'tinggi' | 'menengah' | 'rendah';
+export type ClusterLabel = string;
 
 /** Generic input: region name + numeric score(s) */
 export interface RegionScoreData {
@@ -8,37 +6,70 @@ export interface RegionScoreData {
   score: number | number[];
 }
 
-/** @deprecated Use RegionScoreData instead. */
-export interface RegionClusterData {
-  regionName: string;
-  prevalence: number;
+export interface ClusterMeta {
+  id: string;
+  label: string;
+  color: string;
+  count: number;
+  avgScore: number;
+  silhouette: number;
+  medoid: number | number[];
 }
 
 export interface ClusterResult {
-  /** Maps each region name to its cluster label */
-  clusters: Record<string, ClusterLabel>;
+  /** Maps each region name to its cluster ID (0, 1, 2...) */
+  clusters: Record<string, string>;
   /** Maps each region name to its original numeric score/vector */
   scores: Record<string, number | number[]>;
-  /** The medoid value for each cluster */
+  /** The medoid value for each cluster (ordered by mean) */
   medoids: (number | number[])[];
-  /** 
-   * Global Silhouette Coefficient (-1 to 1). 
-   * > 0.5 indicates strong structure, < 0.2 indicates weak structure.
-   */
+  /** Global Silhouette Coefficient of the best K */
   silhouetteScore: number;
-  /** Average Silhouette Coefficient per cluster label */
-  clusterStats: Record<ClusterLabel, {
-    count: number;
-    avgScore: number;
-    silhouette: number;
-  }>;
-  /**
-   * Dynamic thresholds (only provided for 1D data).
-   */
-  thresholds?: {
-    rendahMax: number;
-    menengahMax: number;
+  /** Enriched metadata for each cluster, ordered from lowest to highest mean score */
+  clusterMeta: ClusterMeta[];
+  /** Results for all tested K values for the calculation page */
+  allKResults: {
+    k: number;
+    silhouetteScore: number;
+  }[];
+  /** The selected K */
+  bestK: number;
+  /** Dynamic thresholds (only provided for 1D data) */
+  thresholds?: number[];
+}
+
+/**
+ * Generate semantic labels based on the number of clusters (K)
+ */
+function getClusterLabels(k: number): string[] {
+  if (k === 2) return ['Rendah', 'Tinggi'];
+  if (k === 3) return ['Rendah', 'Menengah', 'Tinggi'];
+  if (k === 4) return ['Sangat Rendah', 'Rendah', 'Tinggi', 'Sangat Tinggi'];
+  if (k === 5) return ['Sangat Rendah', 'Rendah', 'Menengah', 'Tinggi', 'Sangat Tinggi'];
+  if (k === 6) return ['Sangat Rendah', 'Rendah', 'Waspada Rendah', 'Waspada Tinggi', 'Tinggi', 'Sangat Tinggi'];
+  if (k === 7) return ['Sangat Rendah', 'Rendah', 'Cukup Rendah', 'Menengah', 'Cukup Tinggi', 'Tinggi', 'Sangat Tinggi'];
+  return Array.from({ length: k }, (_, i) => `Level ${i + 1}`);
+}
+
+/**
+ * Generate color palette from green to red based on K
+ */
+function getClusterColors(k: number): string[] {
+  const colors = {
+    green: '#22c55e',
+    lightGreen: '#86efac',
+    yellow: '#facc15',
+    orange: '#fb923c',
+    red: '#ef4444',
+    darkRed: '#b91c1c',
   };
+
+  if (k === 2) return [colors.green, colors.red];
+  if (k === 3) return [colors.green, colors.yellow, colors.red];
+  if (k === 4) return [colors.green, colors.lightGreen, colors.orange, colors.red];
+  if (k === 5) return [colors.green, colors.lightGreen, colors.yellow, colors.orange, colors.red];
+  if (k === 6) return [colors.green, '#a3e635', colors.yellow, colors.orange, colors.red, colors.darkRed];
+  return [colors.green, '#a3e635', '#fde047', colors.yellow, colors.orange, colors.red, colors.darkRed];
 }
 
 // ─────────────────────────────────────────────
@@ -112,6 +143,8 @@ function kMedoidsPAM(
     for (let cIdx = 0; cIdx < k; cIdx++) {
       const clusterPoints = assignments.map((a, i) => a === cIdx ? i : -1).filter(i => i !== -1);
       
+      if (clusterPoints.length === 0) continue;
+
       let bestMedoid = currentMedoids[cIdx];
       let minTotalDist = clusterPoints.reduce((sum, pIdx) => sum + distance(points[pIdx], points[bestMedoid]), 0);
 
@@ -180,99 +213,107 @@ function calculateSilhouettes(points: number[][], assignments: number[], k: numb
 
 export function classifyScoreClusters(data: RegionScoreData[]): ClusterResult {
   const validData = data.filter((d) => d.score !== null && d.score !== undefined);
-  
+  if (validData.length === 0) throw new Error('No valid data for clustering');
+
   // Normalize everything to number[][] internally
   const points = validData.map((d) => Array.isArray(d.score) ? d.score : [d.score]);
-  const k = 3;
+  
+  // Evaluation: Try K from 2 to 7
+  const kRange = [2, 3, 4, 5, 6, 7].filter(k => k <= validData.length);
+  const allKResultsDetailed = kRange.map(k => {
+    const { medoidIndices, assignments } = kMedoidsPAM(points, k);
+    const sil = calculateSilhouettes(points, assignments, k);
+    const score = sil.reduce((a, b) => a + b, 0) / sil.length;
+    return { k, score, medoidIndices, assignments, silhouetteScores: sil };
+  });
 
-  const { medoidIndices, assignments } = kMedoidsPAM(points, k);
-  const silhouetteScores = calculateSilhouettes(points, assignments, k);
-  
-  // Medoid values in their original format (scalar or array)
-  const medoidValuesRaw = medoidIndices.map((i, idx) => validData[i].score);
-  
-  // To assign labels (rendah/menengah/tinggi), sort medoids by their mean value
+  // Pick best K based on silhouette score
+  const bestKResult = allKResultsDetailed.reduce((prev, curr) => (curr.score > prev.score ? curr : prev), allKResultsDetailed[0]);
+  const { k, medoidIndices, assignments, silhouetteScores } = bestKResult;
+
+  // Enriched metadata generation
   const medoidStats = medoidIndices.map((mIdx, clusterIdx) => {
     const p = points[mIdx];
     return {
-      clusterIdx,
+      originalIdx: clusterIdx,
       mean: p.reduce((a, b) => a + b, 0) / p.length,
       value: validData[mIdx].score
     };
   });
   
-  const sortedByMean = [...medoidStats].sort((a, b) => a.mean - b.mean);
-  const [rendahMeta, menengahMeta, tinggiMeta] = sortedByMean;
+  // Sort medoids by mean value (lowest to highest) to assign semantic labels consistently
+  const sortedMedoids = [...medoidStats].sort((a, b) => a.mean - b.mean);
+  const labels = getClusterLabels(k);
+  const colors = getClusterColors(k);
 
-  const clusterIndexToLabel: Record<number, ClusterLabel> = {
-    [rendahMeta.clusterIdx]: 'rendah',
-    [menengahMeta.clusterIdx]: 'menengah',
-    [tinggiMeta.clusterIdx]: 'tinggi'
-  };
-
-  const clusters: Record<string, ClusterLabel> = {};
-  const scores: Record<string, number | number[]> = {};
-  
-  validData.forEach((d, i) => {
-    const label = clusterIndexToLabel[assignments[i]];
-    clusters[d.regionName] = label;
-    scores[d.regionName] = d.score;
+  // Map old cluster index to new sorted ID
+  const clusterIndexMap: Record<number, number> = {};
+  sortedMedoids.forEach((m, i) => {
+    clusterIndexMap[m.originalIdx] = i;
   });
 
-  // Calculate cluster statistics
-  const clusterStats: ClusterResult['clusterStats'] = {
-    rendah: { count: 0, avgScore: 0, silhouette: 0 },
-    menengah: { count: 0, avgScore: 0, silhouette: 0 },
-    tinggi: { count: 0, avgScore: 0, silhouette: 0 }
-  };
+  const clusters: Record<string, string> = {};
+  const scoresMap: Record<string, number | number[]> = {};
+  
+  validData.forEach((d, i) => {
+    const sortedId = clusterIndexMap[assignments[i]];
+    clusters[d.regionName] = sortedId.toString();
+    scoresMap[d.regionName] = d.score;
+  });
+
+  // Calculate cluster-level stats
+  const clusterMeta: ClusterMeta[] = sortedMedoids.map((m, i) => ({
+    id: i.toString(),
+    label: labels[i],
+    color: colors[i],
+    count: 0,
+    avgScore: 0,
+    silhouette: 0,
+    medoid: m.value
+  }));
 
   validData.forEach((d, i) => {
-    const label = clusters[d.regionName];
+    const sortedId = clusterIndexMap[assignments[i]];
     const s = silhouetteScores[i];
     const p = points[i];
     const mean = p.reduce((a, b) => a + b, 0) / p.length;
 
-    clusterStats[label].count++;
-    clusterStats[label].avgScore += mean;
-    clusterStats[label].silhouette += s;
+    clusterMeta[sortedId].count++;
+    clusterMeta[sortedId].avgScore += mean;
+    clusterMeta[sortedId].silhouette += s;
   });
 
-  Object.values(clusterStats).forEach(stat => {
-    if (stat.count > 0) {
-      stat.avgScore /= stat.count;
-      stat.silhouette /= stat.count;
+  clusterMeta.forEach(cm => {
+    if (cm.count > 0) {
+      cm.avgScore = parseFloat((cm.avgScore / cm.count).toFixed(2));
+      cm.silhouette = parseFloat((cm.silhouette / cm.count).toFixed(4));
     }
   });
-
-  const globalSilhouette = silhouetteScores.reduce((a, b) => a + b, 0) / silhouetteScores.length;
 
   const result: ClusterResult = {
     clusters,
-    scores,
-    medoids: [rendahMeta.value, menengahMeta.value, tinggiMeta.value],
-    silhouetteScore: parseFloat(globalSilhouette.toFixed(4)),
-    clusterStats: {
-      rendah: { ...clusterStats.rendah, avgScore: parseFloat(clusterStats.rendah.avgScore.toFixed(2)), silhouette: parseFloat(clusterStats.rendah.silhouette.toFixed(4)) },
-      menengah: { ...clusterStats.menengah, avgScore: parseFloat(clusterStats.menengah.avgScore.toFixed(2)), silhouette: parseFloat(clusterStats.menengah.silhouette.toFixed(4)) },
-      tinggi: { ...clusterStats.tinggi, avgScore: parseFloat(clusterStats.tinggi.avgScore.toFixed(2)), silhouette: parseFloat(clusterStats.tinggi.silhouette.toFixed(4)) }
-    }
+    scores: scoresMap,
+    medoids: sortedMedoids.map(m => m.value),
+    silhouetteScore: parseFloat(bestKResult.score.toFixed(4)),
+    clusterMeta,
+    allKResults: allKResultsDetailed.map(r => ({ k: r.k, silhouetteScore: parseFloat(r.score.toFixed(4)) })),
+    bestK: k
   };
 
   // Provide thresholds ONLY if data is 1D
-  if (points[0].length === 1) {
-    const rMedoid = rendahMeta.mean;
-    const mMedoid = menengahMeta.mean;
-    const tMedoid = tinggiMeta.mean;
-    result.thresholds = {
-      rendahMax: parseFloat(((rMedoid + mMedoid) / 2).toFixed(2)),
-      menengahMax: parseFloat(((mMedoid + tMedoid) / 2).toFixed(2))
-    };
+  if (points[0].length === 1 && k > 1) {
+    const thresholds: number[] = [];
+    for (let i = 0; i < sortedMedoids.length - 1; i++) {
+      const m1 = sortedMedoids[i].mean;
+      const m2 = sortedMedoids[i+1].mean;
+      thresholds.push(parseFloat(((m1 + m2) / 2).toFixed(2)));
+    }
+    result.thresholds = thresholds;
   }
 
   return result;
 }
 
-export function classifyPrevalenceClusters(data: RegionClusterData[]): ClusterResult {
-  return classifyScoreClusters(data.map((d) => ({ regionName: d.regionName, score: d.prevalence })));
+export function classifyPrevalenceClusters(data: any[]): ClusterResult {
+  return classifyScoreClusters(data.map((d) => ({ regionName: d.regionName, score: d.prevalence || d.score })));
 }
-

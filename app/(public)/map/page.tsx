@@ -16,18 +16,17 @@ const EastJavaMap = dynamic<EastJavaMapProps>(() => import('@/components/map/Eas
 });
 
 import { createClient } from '@/utils/supabase/client';
-import type { ClusterResult } from '@/lib/kmedoids';
+import type { ClusterResult, ClusterMeta } from '@/lib/kmedoids';
 
 export default function MapPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [year, setYear] = useState(2024);
   const [years, setYears] = useState<number[]>([2019, 2020, 2021, 2022, 2023, 2024]);
-  const [prevalenceFilters, setPrevalenceFilters] = useState({
-    tinggi: true,
-    menengah: true,
-    rendah: true,
-  });
+  
+  // Dynamic filters: clusterId -> boolean
+  const [clusterFilters, setClusterFilters] = useState<Record<string, boolean>>({});
+  
   const [selectedRegion, setSelectedRegion] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
@@ -58,26 +57,36 @@ export default function MapPage() {
     fetchYears();
   }, []);
 
-  // Fetch K-Medoids whenever year or viewMode changes, with ref-cache to avoid re-fetch
+  // Fetch K-Medoids whenever year or viewMode changes
   useEffect(() => {
-    const cacheKey = `v6-${year}-${viewMode}`;
+    const cacheKey = `v7-${year}-${viewMode}`;
     if (clusterCacheRef.current.has(cacheKey)) {
-      setClusterResult(clusterCacheRef.current.get(cacheKey)!);
+      const cached = clusterCacheRef.current.get(cacheKey)!;
+      setClusterResult(cached);
+      // Reset filters when mode/year changes
+      const initialFilters: Record<string, boolean> = {};
+      cached.clusterMeta.forEach(m => { initialFilters[m.id] = true; });
+      setClusterFilters(initialFilters);
       return;
     }
 
     const fetchClusters = async () => {
       const startTime = performance.now();
       setIsClusterLoading(true);
-      // Keep old result while loading for smoother transition
       try {
         const res = await fetch(`/api/clustering?year=${year}&mode=${viewMode}`);
         if (!res.ok) throw Error(`HTTP ${res.status}`);
-        const data: ClusterResult & { year: number; mode: string; totalRegions: number } = await res.json();
+        const data: ClusterResult = await res.json();
         clusterCacheRef.current.set(cacheKey, data);
+        setClusterResult(data);
+        
+        // Initialize filters
+        const initialFilters: Record<string, boolean> = {};
+        data.clusterMeta.forEach(m => { initialFilters[m.id] = true; });
+        setClusterFilters(initialFilters);
+        
         const duration = performance.now() - startTime;
         console.log(`[MapPage] 🕒 Clustering API (${viewMode}, ${year}): ${duration.toFixed(2)}ms`);
-        setClusterResult(data);
       } catch (err) {
         console.error('[MapPage] Failed to load cluster data:', err);
         setClusterResult(null);
@@ -131,28 +140,22 @@ export default function MapPage() {
         const prevStunting = regionData.stunting_data?.find((s: any) => s.year === year - 1);
         const currentFactors = regionData.stunting_factors?.find((f: any) => f.year === year);
 
-        let skorLangsung = 0;
-        if (currentFactors) {
-          const bblr = currentFactors.bblr_rate || 0;
-          const imd = currentFactors.imd_rate || 0;
-          const asi = currentFactors.asi_rate || 0;
-          skorLangsung = Math.round((bblr + (100 - imd) + (100 - asi)) / 3);
-        }
-
         let trend = 'tetap';
         if (currentStunting && prevStunting) {
           trend = currentStunting.prevalence > prevStunting.prevalence ? 'naik' : 'turun';
         }
 
-        // Determine cluster label from K-Medoids result
-        const clusterLabel = clusterResult?.clusters?.[regionData.name] ?? null;
+        // Determine cluster metadata from K-Medoids result
+        const clusterId = clusterResult?.clusters?.[regionData.name] ?? null;
+        const clusterMeta = clusterId !== null ? clusterResult?.clusterMeta.find(m => m.id === clusterId) : null;
 
         setSelectedRegion({
           name: regionData.name,
           prevalence: currentStunting?.prevalence || 0,
           cases: currentStunting?.stunting_cases ?? null,
           trend,
-          clusterLabel,
+          clusterId,
+          clusterMeta,
           factors: {
             bblr: currentFactors?.bblr_rate || 0,
             imd: currentFactors?.imd_rate || 0,
@@ -169,28 +172,21 @@ export default function MapPage() {
     fetchDetailData();
   }, [selectedRegion?.name, year, clusterResult]);
 
-  // Helper: status label + color from K-Medoids cluster label
-  const getStatusDisplay = (clusterLabel: string | null, prevalence: number) => {
-    if (clusterLabel === 'tinggi') return { text: 'Sangat Rawan', color: 'text-red-500' };
-    if (clusterLabel === 'menengah') return { text: 'Cukup Rawan', color: 'text-yellow-600' };
-    if (clusterLabel === 'rendah') return { text: 'Aman', color: 'text-green-600' };
+  // Helper: status label + color from K-Medoids cluster meta
+  const getStatusDisplay = (meta: ClusterMeta | null, prevalence: number) => {
+    if (meta) {
+      return { text: meta.label, color: 'text-gray-900', textColor: meta.color };
+    }
     // Fallback if no cluster data
-    if (prevalence > 20) return { text: 'Sangat Rawan', color: 'text-red-500' };
-    if (prevalence > 14) return { text: 'Cukup Rawan', color: 'text-yellow-600' };
-    if (prevalence > 0) return { text: 'Aman', color: 'text-green-600' };
-    return { text: 'Belum Ada Data', color: 'text-gray-400' };
+    if (prevalence > 20) return { text: 'Sangat Rawan', color: 'text-red-500', textColor: '#ef4444' };
+    if (prevalence > 14) return { text: 'Cukup Rawan', color: 'text-yellow-600', textColor: '#facc15' };
+    if (prevalence > 0) return { text: 'Aman', color: 'text-green-600', textColor: '#22c55e' };
+    return { text: 'Belum Ada Data', color: 'text-gray-400', textColor: '#94a3b8' };
   };
 
-  // Dynamic legend labels from K-Medoids thresholds (only for 1D data)
+  // Dynamic legend labels
   const thresholds = clusterResult?.thresholds;
   const unit = viewMode === 'prevalence' ? '%' : '';
-  const legendLabels = {
-    tinggi: thresholds ? `(> ${thresholds.menengahMax}${unit})` : '',
-    menengah: thresholds
-      ? `(${thresholds.rendahMax}${unit} – ${thresholds.menengahMax}${unit})`
-      : '',
-    rendah: thresholds ? `(< ${thresholds.rendahMax}${unit})` : '',
-  };
 
   return (
     <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden">
@@ -201,8 +197,9 @@ export default function MapPage() {
           setSelectedRegion={handleSelectRegion}
           year={year}
           searchQuery={searchQuery}
-          prevalenceFilters={prevalenceFilters}
+          clusterFilters={clusterFilters}
           clusterData={clusterResult?.clusters ?? null}
+          clusterMeta={clusterResult?.clusterMeta ?? null}
           scores={clusterResult?.scores ?? null}
           viewMode={viewMode}
         />
@@ -296,11 +293,11 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* 3. Prevalence Checkboxes — labels are dynamic from K-Medoids thresholds */}
+            {/* 3. K-Medoids Dynamic Checkboxes */}
             <div className="transition-opacity duration-300">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  {viewMode === 'prevalence' ? 'Tingkat Prevalensi' : 'Tingkat Risiko'}
+                  Tingkat {viewMode === 'prevalence' ? 'Prevalensi' : 'Risiko'}
                 </label>
                 {(isClusterLoading || isDetailLoading) && (
                   <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 animate-pulse">
@@ -313,7 +310,7 @@ export default function MapPage() {
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
                   <span className="text-[10px] text-blue-600 font-semibold tracking-wide">
-                    Klasifikasi K-Medoids {clusterResult ? `(${year})` : '— memuat...'}
+                    Optimal K: {clusterResult?.bestK ?? '...'} ({year})
                   </span>
                 </div>
                 {clusterResult && (
@@ -327,72 +324,47 @@ export default function MapPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={prevalenceFilters.tinggi}
-                    onChange={() => setPrevalenceFilters(f => ({ ...f, tinggi: !f.tinggi }))}
-                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-red-500 rounded-full" />
-                    <span className="text-sm text-gray-700 font-medium">
-                      Sangat Rawan <span className="text-gray-400 font-normal">{legendLabels.tinggi}</span>
-                    </span>
-                  </div>
-                </label>
-                <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={prevalenceFilters.menengah}
-                    onChange={() => setPrevalenceFilters(f => ({ ...f, menengah: !f.menengah }))}
-                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-yellow-400 rounded-full" />
-                    <span className="text-sm text-gray-700 font-medium">
-                      Cukup Rawan <span className="text-gray-400 font-normal">{legendLabels.menengah}</span>
-                    </span>
-                  </div>
-                </label>
-                <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={prevalenceFilters.rendah}
-                    onChange={() => setPrevalenceFilters(f => ({ ...f, rendah: !f.rendah }))}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-green-500 rounded-full" />
-                    <span className="text-sm text-gray-700 font-medium">
-                      Aman <span className="text-gray-400 font-normal">{legendLabels.rendah}</span>
-                    </span>
-                  </div>
-                </label>
+                {clusterResult?.clusterMeta.map((meta, idx) => (
+                  <label key={meta.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={clusterFilters[meta.id] ?? true}
+                      onChange={() => setClusterFilters(f => ({ ...f, [meta.id]: !f[meta.id] }))}
+                      className="w-4 h-4 border-gray-300 rounded focus:ring-blue-500"
+                      style={{ color: meta.color }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: meta.color }} />
+                      <span className="text-sm text-gray-700 font-medium">
+                        {meta.label} <span className="text-gray-400 font-normal text-[10px]">
+                          {thresholds && thresholds[idx-1] !== undefined && thresholds[idx] !== undefined ? `(${thresholds[idx-1]}${unit} – ${thresholds[idx]}${unit})` : 
+                           thresholds && idx === 0 ? `(< ${thresholds[0]}${unit})` : 
+                           thresholds && idx === clusterResult.bestK - 1 ? `(> ${thresholds[idx-1]}${unit})` : ''}
+                        </span>
+                      </span>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
 
-            {/* K-Medoids Medoid Info (collapsible info card) */}
-            {clusterResult?.medoids && (
+            {/* K-Medoids Medoid Info */}
+            {clusterResult?.clusterMeta && (
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mt-4">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                   <Info className="w-3 h-3" />
                   {viewMode === 'prevalence' ? 'Nilai Medoid K-Medoids' : 'Skor Medoid K-Medoids'} ({year})
                 </p>
                 <div className="space-y-1">
-                  {[
-                    { label: 'Rendah', color: 'bg-green-400', value: clusterResult.medoids[0] },
-                    { label: 'Menengah', color: 'bg-yellow-400', value: clusterResult.medoids[1] },
-                    { label: 'Tinggi', color: 'bg-red-400', value: clusterResult.medoids[2] },
-                  ].map((m) => (
-                    <div key={m.label} className="flex items-center justify-between text-xs">
+                  {clusterResult.clusterMeta.map((meta) => (
+                    <div key={meta.id} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${m.color}`} />
-                        <span className="text-gray-600">{m.label}</span>
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.color }} />
+                        <span className="text-gray-600">{meta.label}</span>
                       </div>
                       <span className="font-bold text-gray-800">
                         {(() => {
-                          const val = m.value;
+                          const val = meta.medoid;
                           if (Array.isArray(val)) {
                             return (val.reduce((a, b) => a + b, 0) / val.length).toFixed(1);
                           }
@@ -420,29 +392,21 @@ export default function MapPage() {
            viewMode === 'environment_risk' ? 'Skor Risiko Lingkungan' :
            'Skor Risiko Komprehensif'}
         </h4>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-red-500 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">
-              {legendLabels.tinggi}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-yellow-400 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">
-              {legendLabels.menengah}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 bg-green-500 rounded-md" />
-            <span className="text-xs font-medium text-gray-600">
-              {legendLabels.rendah}
-            </span>
-          </div>
+        <div className="flex items-center gap-4 flex-wrap max-w-sm">
+          {clusterResult?.clusterMeta.map((meta, idx) => (
+            <div key={meta.id} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-md" style={{ backgroundColor: meta.color }} />
+              <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">
+                {meta.label} {thresholds && thresholds[idx-1] !== undefined && thresholds[idx] !== undefined ? `(${thresholds[idx-1]}${unit}–${thresholds[idx]}${unit})` : 
+                           thresholds && idx === 0 ? `(<${thresholds[0]}${unit})` : 
+                           thresholds && idx === clusterResult.bestK - 1 ? `(>${thresholds[idx-1]}${unit})` : ''}
+              </span>
+            </div>
+          ))}
         </div>
-        {clusterResult && (viewMode === 'prevalence' || viewMode.includes('risk')) && (
+        {clusterResult && (
           <p className="text-[10px] text-blue-500 font-semibold tracking-wide text-center mt-0.5">
-            ✦ Diklasifikasikan oleh K-Medoids
+            ✦ Optimasi Silhouette (K={clusterResult.bestK})
           </p>
         )}
       </div>
@@ -497,9 +461,9 @@ export default function MapPage() {
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
                       <span className="text-xs text-gray-500">Status</span>
                       {(() => {
-                        const status = getStatusDisplay(selectedRegion.clusterLabel, selectedRegion.prevalence);
+                        const status = getStatusDisplay(selectedRegion.clusterMeta, selectedRegion.prevalence);
                         return (
-                          <p className={`text-sm font-bold mt-1 ${status.color}`}>
+                          <p className={`text-sm font-bold mt-1`} style={{ color: status.textColor }}>
                             {status.text}
                           </p>
                         );
@@ -508,15 +472,13 @@ export default function MapPage() {
                   </div>
 
                   {/* Cluster badge */}
-                  {selectedRegion.clusterLabel && (
+                  {selectedRegion.clusterMeta && (
                     <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
                       <span className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">
                         K-Medoids Cluster:
                       </span>
-                      <span className={`text-xs font-bold capitalize ${selectedRegion.clusterLabel === 'tinggi' ? 'text-red-600' :
-                        selectedRegion.clusterLabel === 'menengah' ? 'text-yellow-600' : 'text-green-600'
-                        }`}>
-                        {selectedRegion.clusterLabel}
+                      <span className="text-xs font-bold capitalize" style={{ color: selectedRegion.clusterMeta.color }}>
+                        {selectedRegion.clusterMeta.label}
                       </span>
                     </div>
                   )}

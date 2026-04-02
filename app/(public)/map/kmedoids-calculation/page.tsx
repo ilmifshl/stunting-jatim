@@ -6,25 +6,26 @@ import {
   ArrowLeft,
   Calculator,
   Info,
-  Table,
   Target,
   ArrowRight,
   Sigma,
   Box,
   MapPin,
   ChevronDown,
-  LayoutDashboard
+  LayoutDashboard,
+  CircleQuestionMark,
+  Award
 } from 'lucide-react';
 import Link from 'next/link';
 import { distance } from '@/lib/kmedoids';
-import type { ClusterResult, ClusterLabel } from '@/lib/kmedoids';
+import type { ClusterResult } from '@/lib/kmedoids';
 
 export default function KMedoidsCalculationPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const year = parseInt(searchParams.get('year') ?? '2024');
-  const mode = (searchParams.get('mode') ?? 'prevalence') as 'prevalence' | 'direct_risk' | 'prevention_risk';
+  const mode = (searchParams.get('mode') ?? 'prevalence') as any;
 
   const [data, setData] = useState<ClusterResult & { totalRegions: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function KMedoidsCalculationPage() {
         setData(json);
         // Default simulation to first region
         if (json.scores) {
-          setSelectedSimRegion(Object.keys(json.scores)[0]);
+          setSelectedSimRegion(Object.keys(json.scores).sort()[0]);
         }
       } catch (err: any) {
         setError(err.message);
@@ -127,7 +128,7 @@ export default function KMedoidsCalculationPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20">
       {/* Header Sticky */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-50">
+      <div className="bg-white border-b border-gray-100 sticky top-16 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -153,7 +154,7 @@ export default function KMedoidsCalculationPage() {
             </div>
             <div className="h-8 w-px bg-gray-100" />
             <div className="text-right">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette Score</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette (Optimal K={data.bestK})</p>
               <p className={`text-xs font-black ${data.silhouetteScore > 0.5 ? 'text-green-600' : 'text-orange-600'}`}>
                 {data.silhouetteScore.toFixed(4)}
               </p>
@@ -162,19 +163,86 @@ export default function KMedoidsCalculationPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 mt-8 space-y-10">
+      <div className="max-w-6xl mx-auto px-4 mt-8 space-y-12">
 
-        {/* Step 1: Penyiapan Data */}
+        {/* New Step 1: Evaluasi K */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-blue-200">1</div>
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-emerald-200">1</div>
+            <div>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Evaluasi Koefisien Silhouette</h2>
+              <p className="text-xs text-gray-500 font-medium">Mencari jumlah klaster (K) paling optimal berdasarkan struktur persebaran data.</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[2.5rem] border border-gray-200 shadow-xl overflow-hidden p-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              <div>
+                <p className="text-sm text-gray-600 leading-relaxed mb-6">
+                  Algoritma secara otomatis menguji nilai <b>K=2 hingga K=7</b>. Nilai K dengan skor Silhouette tertinggi dipilih sebagai model klastering terbaik untuk faktor ini.
+                </p>
+                <div className="space-y-3">
+                  {data.allKResults.map((res) => (
+                    <div key={res.k} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${res.k === data.bestK ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500 ring-offset-2' : 'bg-gray-50 border-gray-100'}`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-black ${res.k === data.bestK ? 'text-emerald-700' : 'text-gray-400'}`}>K = {res.k}</span>
+                        {res.k === data.bestK && (
+                          <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter flex items-center gap-1">
+                            <Award className="w-3 h-3" /> Paling Optimal
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden hidden sm:block">
+                          <div
+                            className={`h-full ${res.k === data.bestK ? 'bg-emerald-500' : 'bg-gray-400'}`}
+                            style={{ width: `${Math.max(0, res.silhouetteScore * 100)}%` }}
+                          />
+                        </div>
+                        <span className={`text-sm font-black ${res.k === data.bestK ? 'text-emerald-700' : 'text-gray-600'}`}>
+                          {res.silhouetteScore.toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-emerald-600 mb-4">
+                  <CircleQuestionMark className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-black text-gray-900 mb-2">Mengapa K={data.bestK}?</h3>
+                <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                  Berdasarkan pemrosesan data {year}, pembagian menjadi {data.bestK} kelompok menghasilkan
+                  jarak antar klaster yang paling maksimal dan kepadatan dalam klaster yang paling baik.
+                </p>
+                <div className="flex items-center gap-8">
+                  <div className="text-center">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Input K</p>
+                    <p className="text-2xl font-black text-gray-900">2-7</p>
+                  </div>
+                  <div className="w-px h-10 bg-gray-200" />
+                  <div className="text-center">
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase">K Terpilih</p>
+                    <p className="text-2xl font-black text-emerald-600">{data.bestK}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Step 2: Penyiapan Data */}
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-blue-200">2</div>
             <div>
               <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Penyiapan Vektor Fitur</h2>
               <p className="text-xs text-gray-500 font-medium">{modeMetadata.description}</p>
             </div>
           </div>
 
-          <div className="bg-white rounded-[2.5rem] border border-gray-200 shadow-xl shadow-slate-200/50 overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] border border-gray-200 shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -215,49 +283,48 @@ export default function KMedoidsCalculationPage() {
           </div>
         </section>
 
-        {/* Step 2: Inisialisasi Medoid */}
+        {/* Step 3: Inisialisasi Medoid */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-indigo-200">2</div>
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-indigo-200">3</div>
             <div>
-              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Seleksi Medoid Final</h2>
-              <p className="text-xs text-gray-500 font-medium">Titik pusat representative hasil iterasi PAM (Partitioning Around Medoids).</p>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Seleksi Medoid ({data.bestK} Klaster)</h2>
+              <p className="text-xs text-gray-500 font-medium">Titik pusat representatif sebagai prototipe setiap klaster.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { label: 'Rendah', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', value: data.medoids[0] },
-              { label: 'Menengah', color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-100', value: data.medoids[1] },
-              { label: 'Tinggi', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', value: data.medoids[2] },
-            ].map((m) => (
-              <div key={m.label} className={`p-6 rounded-[2rem] border ${m.bg} ${m.border} shadow-lg shadow-slate-100 transition-all hover:-translate-y-1`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {data.clusterMeta.map((meta) => (
+              <div key={meta.id} className="p-6 rounded-[2rem] border bg-white border-gray-100 shadow-xl shadow-slate-100 transition-all hover:-translate-y-1">
                 <div className="flex justify-between items-center mb-4">
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${m.color}`}>Cluster {m.label}</span>
-                  <div className={`p-2 rounded-xl bg-white shadow-sm ${m.color}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.color }} />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-800">{meta.label}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 shadow-sm text-indigo-600">
                     <Target className="w-4 h-4" />
                   </div>
                 </div>
-                <p className="text-xs font-bold text-slate-500 mb-1 uppercase tracking-tighter">Vektor Medoid</p>
-                <div className="text-2xl font-black text-slate-800 tracking-tighter">
-                  [{Array.isArray(m.value) ? m.value.join(', ') : m.value}]
+                <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Vektor Medoid</p>
+                <div className="text-xl font-black text-slate-800 tracking-tighter truncate">
+                  [{Array.isArray(meta.medoid) ? meta.medoid.join(', ') : meta.medoid}]
                 </div>
-                <div className="mt-4 pt-4 border-t border-white/50 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Jumlah Anggota</span>
-                  <span className="text-sm font-black text-slate-700">{data.clusterStats[m.label.toLowerCase() as ClusterLabel].count} Wilayah</span>
+                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Anggota</span>
+                  <span className="text-sm font-black text-slate-700">{meta.count} Wilayah</span>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Step 3: Simulasi Perhitungan */}
+        {/* Step 4: Simulasi Perhitungan */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-orange-200">3</div>
+            <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-orange-200">4</div>
             <div>
               <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Simulasi Jarak Manhattan</h2>
-              <p className="text-xs text-gray-500 font-medium">Bagaimana satu wilayah menentukan klasternya berdasarkan jarak terdekat ke medoid.</p>
+              <p className="text-xs text-gray-500 font-medium">Uji kedekatan satu wilayah dengan {data.bestK} medoid yang ada.</p>
             </div>
           </div>
 
@@ -301,6 +368,15 @@ export default function KMedoidsCalculationPage() {
                           </span>
                         </div>
                       ))}
+                      {/* Added Average Score to match map tooltip */}
+                      {Array.isArray(data.scores[selectedSimRegion]) && (
+                        <div className="pt-3 border-t border-slate-200 mt-2 flex justify-between items-center text-xs">
+                          <span className="text-blue-600 font-bold uppercase tracking-tighter">Rata-rata Skor</span>
+                          <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                            {(data.scores[selectedSimRegion] as number[]).reduce((a, b) => a + b, 0) / (data.scores[selectedSimRegion] as number[]).length.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -316,8 +392,8 @@ export default function KMedoidsCalculationPage() {
                   <div className="text-blue-400 opacity-60 mb-2"># {modeMetadata.formula}</div>
                   <div className="space-y-4">
                     {selectedSimRegion && (
-                      ['rendah', 'menengah', 'tinggi'].map((label, idx) => {
-                        const medVector = data.medoids[idx];
+                      data.clusterMeta.map((meta) => {
+                        const medVector = meta.medoid;
                         const regVector = data.scores[selectedSimRegion];
                         const distValue = distance(
                           Array.isArray(regVector) ? regVector : [regVector],
@@ -325,10 +401,10 @@ export default function KMedoidsCalculationPage() {
                         );
 
                         return (
-                          <div key={label} className="flex flex-col gap-1">
+                          <div key={meta.id} className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-gray-500">Dist to</span>
-                              <span className="text-white font-bold capitalize">{label}:</span>
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.color }} />
+                              <span className="text-white font-bold capitalize">{meta.label}:</span>
                             </div>
                             <div className="text-xs overflow-wrap-anywhere">
                               Σ |[{Array.isArray(regVector) ? regVector.join(', ') : regVector}] - [{Array.isArray(medVector) ? medVector.join(', ') : medVector}]| =
@@ -347,15 +423,25 @@ export default function KMedoidsCalculationPage() {
                       <Box className="w-6 h-6" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Hasil Klasifikasi</p>
+                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Hasil Penetapan Klaster</p>
                       <p className="text-sm font-medium text-gray-700 leading-relaxed">
-                        Jarak terendah adalah ke medoid <b className="text-blue-700 capitalize">{data.clusters[selectedSimRegion]}</b>.
-                        Maka, <b className="text-gray-900">{selectedSimRegion}</b> ditetapkan masuk ke cluster
-                        <span className={`ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white ${data.clusters[selectedSimRegion] === 'tinggi' ? 'bg-red-500' :
-                            data.clusters[selectedSimRegion] === 'menengah' ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}>
-                          {data.clusters[selectedSimRegion]}
-                        </span>
+                        {(() => {
+                          const medVector = data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].medoid;
+                          const regVector = data.scores[selectedSimRegion];
+                          const distValue = distance(
+                            Array.isArray(regVector) ? regVector : [regVector],
+                            Array.isArray(medVector) ? medVector : [medVector]
+                          );
+                          return (
+                            <>
+                              Jarak Manhattan terkecil (<b className="text-blue-600">{distValue.toFixed(2)}</b>) ditemukan pada medoid <b>{data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].label}</b>.
+                              Maka, <b>{selectedSimRegion}</b> masuk ke kelompok
+                              <span className="ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white" style={{ backgroundColor: data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].color }}>
+                                {data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].label}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -373,7 +459,7 @@ export default function KMedoidsCalculationPage() {
                 <Sigma className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase">Avg Cluster Silhouette</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase">Best Global Silhouette</p>
                 <p className="text-xl font-black text-gray-900">{data.silhouetteScore.toFixed(4)}</p>
               </div>
             </div>
@@ -382,8 +468,8 @@ export default function KMedoidsCalculationPage() {
                 <LayoutDashboard className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase">Total Entitas</p>
-                <p className="text-xl font-black text-gray-900">{data.totalRegions} Wilayah</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase">Optimal Klaster</p>
+                <p className="text-xl font-black text-gray-900">{data.bestK} Kelompok</p>
               </div>
             </div>
           </div>
@@ -392,7 +478,7 @@ export default function KMedoidsCalculationPage() {
             href="/map"
             className="group flex items-center gap-3 bg-gray-900 text-white px-8 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-gray-200 hover:shadow-blue-200"
           >
-            Selesai & Tutup
+            Selesai & Ke Peta
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
         </footer>
