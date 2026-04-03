@@ -5,11 +5,50 @@ import { useState, useEffect } from 'react';
 import {
   ArrowLeft, MapPin, TrendingDown, TrendingUp, Users,
   AlertTriangle, Droplet, Info, LayoutDashboard,
-  Baby, Heart, ShieldCheck, Home, GlassWater
+  Baby, Heart, ShieldCheck, Home, GlassWater, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import AdminTrendChart from '@/components/admin/AdminTrendChart';
+
+const colorStyles: { [key: string]: any } = {
+  blue: {
+    iconBg: 'bg-blue-50',
+    iconText: 'text-blue-600',
+    btnHover: 'hover:bg-blue-50 hover:text-blue-600',
+    storyBg: 'bg-blue-50/30',
+    storyBorder: 'border-blue-100',
+    storyIconText: 'text-blue-600',
+    storyIconBorder: 'border-blue-100',
+  },
+  amber: {
+    iconBg: 'bg-amber-50',
+    iconText: 'text-amber-600',
+    btnHover: 'hover:bg-amber-50 hover:text-amber-600',
+    storyBg: 'bg-amber-50/30',
+    storyBorder: 'border-amber-100',
+    storyIconText: 'text-amber-600',
+    storyIconBorder: 'border-amber-100',
+  },
+  rose: {
+    iconBg: 'bg-rose-50',
+    iconText: 'text-rose-600',
+    btnHover: 'hover:bg-rose-50 hover:text-rose-600',
+    storyBg: 'bg-rose-50/30',
+    storyBorder: 'border-rose-100',
+    storyIconText: 'text-rose-600',
+    storyIconBorder: 'border-rose-100',
+  },
+  emerald: {
+    iconBg: 'bg-emerald-50',
+    iconText: 'text-emerald-600',
+    btnHover: 'hover:bg-emerald-50 hover:text-emerald-600',
+    storyBg: 'bg-emerald-50/30',
+    storyBorder: 'border-emerald-100',
+    storyIconText: 'text-emerald-600',
+    storyIconBorder: 'border-emerald-100',
+  }
+};
 
 export default function RegionDetailPage() {
   const params = useParams();
@@ -23,6 +62,8 @@ export default function RegionDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [aiStory, setAiStory] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [sectorStories, setSectorStories] = useState<{ [key: string]: string }>({});
+  const [isSectorLoading, setIsSectorLoading] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -104,6 +145,33 @@ export default function RegionDetailPage() {
     }
   };
 
+  const handleGenerateSectorStory = async (category: string, categoryData: any) => {
+    setIsSectorLoading(prev => ({ ...prev, [category]: true }));
+    try {
+      const response = await fetch('/api/ai/storytelling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regionName,
+          year: activeYear,
+          category,
+          categoryData
+        }),
+      });
+      const data = await response.json();
+      if (data.story) {
+        setSectorStories(prev => ({ ...prev, [category]: data.story }));
+      } else {
+        throw new Error(data.error || 'Gagal mengambil cerita');
+      }
+    } catch (err) {
+      console.error('Sector AI Error:', err);
+      setSectorStories(prev => ({ ...prev, [category]: 'Gagal memuat analisis sektoral.' }));
+    } finally {
+      setIsSectorLoading(prev => ({ ...prev, [category]: false }));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -152,7 +220,7 @@ export default function RegionDetailPage() {
     {
       title: 'Faktor Pencegahan',
       icon: ShieldCheck,
-      color: 'orange',
+      color: 'amber',
       description: 'Upaya preventif melalui imunisasi dan suplementasi.',
       items: [
         { label: 'Imunisasi Dasar Lengkap', count: currentFactors?.idl_count, rate: currentFactors?.idl_rate, unit: '% Bayi' },
@@ -162,7 +230,7 @@ export default function RegionDetailPage() {
     {
       title: 'Faktor Risiko Ibu',
       icon: Heart,
-      color: 'red',
+      color: 'rose',
       description: 'Kesehatan ibu hamil dan calon pengantin.',
       items: [
         { label: 'TTD 90 Tablet', count: currentFactors?.ttd_count, rate: currentFactors?.ttd_rate, unit: '% Ibu Hamil' },
@@ -172,7 +240,7 @@ export default function RegionDetailPage() {
     {
       title: 'Lingkungan & Sanitasi',
       icon: Home,
-      color: 'green',
+      color: 'emerald',
       description: 'Ketersediaan sarana prasarana kesehatan lingkungan.',
       items: [
         { label: 'Akses Jamban Sehat', count: currentFactors?.jamban_count, rate: currentFactors?.jamban_rate, unit: '% KK' },
@@ -303,7 +371,7 @@ export default function RegionDetailPage() {
                       </div>
                     </div>
                     <div className="flex-1">
-                      <p className="text-base text-slate-700 font-medium leading-relaxed italic md:pr-20">
+                      <p className="text-lg text-slate-700 font-medium leading-relaxed italic md:pr-20">
                         "{aiStory}"
                       </p>
                       <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2">
@@ -350,13 +418,53 @@ export default function RegionDetailPage() {
             <div className="flex-1 h-px bg-gray-100"></div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {factorGroups.map((group) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">            {factorGroups.map((group) => {
               const Icon = group.icon;
+              const hasStory = !!sectorStories[group.title];
+              const isLoading = !!isSectorLoading[group.title];
+
+              // Explicit color mapping to avoid Tailwind purging dynamic classes
+              const colorConfig: { [key: string]: any } = {
+                blue: { 
+                  bar: 'bg-blue-600', 
+                  bg: 'bg-blue-50', 
+                  text: 'text-blue-600', 
+                  border: 'border-blue-100',
+                  btnHover: 'hover:bg-blue-50 hover:text-blue-600',
+                  storyBg: 'bg-blue-50/30'
+                },
+                amber: { 
+                  bar: 'bg-amber-600', 
+                  bg: 'bg-amber-50', 
+                  text: 'text-amber-600', 
+                  border: 'border-amber-100',
+                  btnHover: 'hover:bg-amber-50 hover:text-amber-600',
+                  storyBg: 'bg-amber-50/30'
+                },
+                rose: { 
+                  bar: 'bg-rose-600', 
+                  bg: 'bg-rose-50', 
+                  text: 'text-rose-600', 
+                  border: 'border-rose-100',
+                  btnHover: 'hover:bg-rose-50 hover:text-rose-600',
+                  storyBg: 'bg-rose-50/30'
+                },
+                emerald: { 
+                  bar: 'bg-emerald-600', 
+                  bg: 'bg-emerald-50', 
+                  text: 'text-emerald-600', 
+                  border: 'border-emerald-100',
+                  btnHover: 'hover:bg-emerald-50 hover:text-emerald-600',
+                  storyBg: 'bg-emerald-50/30'
+                },
+              };
+
+              const colors = colorConfig[group.color] || colorConfig.blue;
+
               return (
-                <div key={group.title} className="bg-white rounded-[3rem] p-8 border border-slate-200/60 shadow-2xl shadow-blue-900/5 group/parent">
+                <div key={group.title} className="bg-white rounded-[3rem] p-8 border border-slate-200/60 shadow-2xl shadow-blue-900/5 group/parent flex flex-col">
                   <div className="flex items-center gap-5 mb-8">
-                    <div className={`p-4 rounded-[1.5rem] bg-${group.color}-50 text-${group.color}-600 group-hover/parent:scale-105 transition-transform duration-500 shadow-sm`}>
+                    <div className={`p-4 rounded-[1.5rem] ${colors.bg} ${colors.text} group-hover/parent:scale-105 transition-transform duration-500 shadow-sm`}>
                       <Icon className="w-7 h-7" />
                     </div>
                     <div>
@@ -365,7 +473,8 @@ export default function RegionDetailPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-6">
+                  {/* Restored Progress Bar Style */}
+                  <div className="space-y-6 flex-1">
                     {group.items.map((item) => (
                       <div key={item.label} className="group">
                         <div className="flex justify-between items-center mb-3">
@@ -382,7 +491,7 @@ export default function RegionDetailPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden p-[2px]">
                             <div
-                              className={`h-full transition-all duration-1000 bg-${group.color}-600 rounded-full group-hover:brightness-110 shadow-sm`}
+                              className={`h-full transition-all duration-1000 ${colors.bar} rounded-full group-hover:brightness-110 shadow-sm`}
                               style={{ width: `${item.rate ?? 0}%` }}
                             ></div>
                           </div>
@@ -393,9 +502,51 @@ export default function RegionDetailPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Sector Storytelling Section Kept */}
+                  <div className="mt-6 pt-6 border-t border-slate-100">
+                    {!hasStory && !isLoading && (
+                      <button
+                        onClick={() => handleGenerateSectorStory(group.title, group.items)}
+                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-50 text-slate-500 ${colors.btnHover} border border-dashed border-slate-200 transition-all font-black text-[10px] uppercase tracking-widest`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Analisis Storytelling Sektoral
+                      </button>
+                    )}
+
+                    {isLoading && (
+                      <div className="flex items-center justify-center gap-3 py-3 text-blue-600 animate-pulse">
+                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[9px] font-black uppercase tracking-widest">Merangkai narasi data...</span>
+                      </div>
+                    )}
+
+                    {hasStory && (
+                      <div className={`${colors.storyBg} rounded-2xl p-4 border ${colors.border} relative group/story`}>
+                        <div className="flex gap-3">
+                          <div className={`w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center ${colors.text} border ${colors.border} flex-shrink-0`}>
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-base text-slate-600 font-medium leading-relaxed italic">
+                              "{sectorStories[group.title]}"
+                            </p>
+                            <button 
+                              onClick={() => handleGenerateSectorStory(group.title, group.items)}
+                              className="mt-2 text-[12px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+                            >
+                              Refresh Analisis
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
+
           </div>
         </div>
 

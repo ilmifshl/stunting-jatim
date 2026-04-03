@@ -7,7 +7,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: NextRequest) {
   try {
-    const { regionName, year } = await req.json();
+    const { regionName, year, category, categoryData } = await req.json();
 
     if (!regionName || !year) {
       return NextResponse.json({ error: 'Region and Year are required' }, { status: 400 });
@@ -45,30 +45,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Data for year ${year} not found` }, { status: 404 });
     }
 
-    // 2. Augment: Create the Prompt
-    const prompt = `
-      Anda adalah seorang ahli kesehatan masyarakat dan data storyteller yang membantu menjelaskan risiko stunting di Jawa Timur.
-      Tugas Anda adalah menulis narasi pendek berbasis data untuk wilayah ${regionName} pada tahun ${year}.
+    // 2. Augment: Create the Prompt based on Mode (Global or Sectoral)
+    let prompt = "";
 
-      DATA STATISTIK:
-      - Prevalensi Stunting Tahun ${year}: ${currentYearData.prevalence}%
-      ${prevYearData ? `- Prevalensi Tahun ${year - 1}: ${prevYearData.prevalence}%` : ''}
-      - Total Kasus Stunting: ${currentYearData.stunting_cases} anak
+    if (category && categoryData) {
+      // Prompt khusus sektoral/kategori
+      const factorList = categoryData.map((item: any) => `- ${item.label}: ${item.rate}% (${item.count} ${item.unit})`).join('\n');
+      
+      prompt = `
+        Anda adalah seorang pakar teknis kesehatan masyarakat. 
+        Tugas Anda adalah memberikan "Data Storytelling" singkat untuk kategori "${category}" di wilayah ${regionName} pada tahun ${year}.
 
-      FAKTOR RISIKO (DETERMINAN):
-      - BBLR/Prematur: ${currentFactors?.bblr_rate || 'N/A'}%
-      - ASI Eksklusif: ${currentFactors?.asi_rate || 'N/A'}%
-      - Akses Jamban Sehat: ${currentFactors?.jamban_rate || 'N/A'}%
-      - Imunisasi Dasar Lengkap: ${currentFactors?.idl_rate || 'N/A'}%
-      - Layanan Kes. Catin: ${currentFactors?.catin_rate || 'N/A'}%
+        DATA KATEGORI ${category}:
+        ${factorList}
 
-      INSTRUKSI PENULISAN:
-      - Gunakan Bahasa Indonesia yang ramah, informatif, dan tidak terlalu teknis.
-      - Berikan 1-2 kalimat narasi tentang tren (naik/turun).
-      - Soroti faktor risiko mana yang paling perlu diperhatikan berdasarkan angka di atas.
-      - Akhiri dengan 1 kalimat saran motivasi untuk pemerintah daerah atau warga.
-      - Maksimal 3-4 kalimat pendek. Jangan terlalu panjang.
-    `;
+        INSTRUKSI KHUSUS:
+        - Jelaskan apa arti angka-angka di atas dalam konteks pencegahan stunting.
+        - Jika angka rendah (misal ASI < 50%), soroti sebagai "Peringatan".
+        - Jika angka tinggi, berikan apresiasi singkat namun tetap waspada.
+        - Jelaskan hubungan antar faktor di dalam kategori ini (jika ada).
+        - Gunakan gaya bahasa yang profesional namun mudah dipahami orang awam.
+        - Maksimal 3 kalimat. Langsung ke inti sarinya.
+      `;
+    } else {
+      // Prompt global (existing)
+      prompt = `
+        Anda adalah seorang ahli kesehatan masyarakat dan data storyteller yang membantu menjelaskan risiko stunting di Jawa Timur.
+        Tugas Anda adalah menulis narasi pendek berbasis data untuk wilayah ${regionName} pada tahun ${year}.
+
+        DATA STATISTIK:
+        - Prevalensi Stunting Tahun ${year}: ${currentYearData.prevalence}%
+        ${prevYearData ? `- Prevalensi Tahun ${year - 1}: ${prevYearData.prevalence}%` : ''}
+        - Total Kasus Stunting: ${currentYearData.stunting_cases} anak
+
+        FAKTOR RISIKO (DETERMINAN):
+        - BBLR/Prematur: ${currentFactors?.bblr_rate || 'N/A'}%
+        - ASI Eksklusif: ${currentFactors?.asi_rate || 'N/A'}%
+        - Akses Jamban Sehat: ${currentFactors?.jamban_rate || 'N/A'}%
+        - Imunisasi Dasar Lengkap: ${currentFactors?.idl_rate || 'N/A'}%
+        - Layanan Kes. Catin: ${currentFactors?.catin_rate || 'N/A'}%
+
+        INSTRUKSI PENULISAN:
+        - Gunakan Bahasa Indonesia yang ramah, informatif, dan tidak terlalu teknis.
+        - Berikan 1-2 kalimat narasi tentang tren (naik/turun).
+        - Soroti faktor risiko mana yang paling perlu diperhatikan berdasarkan angka di atas.
+        - Akhiri dengan 1 kalimat saran motivasi untuk pemerintah daerah atau warga.
+        - Maksimal 3-4 kalimat pendek. Jangan terlalu panjang.
+      `;
+    }
 
     // 3. Generate dengan Fallback Mechanism
     let result;
