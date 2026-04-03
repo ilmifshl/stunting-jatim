@@ -19,8 +19,10 @@ import {
 import Link from 'next/link';
 import { distance } from '@/lib/kmedoids';
 import type { ClusterResult } from '@/lib/kmedoids';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function KMedoidsCalculationPage() {
+  const { lang, t } = useLanguage();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -33,14 +35,36 @@ export default function KMedoidsCalculationPage() {
 
   const [selectedSimRegion, setSelectedSimRegion] = useState<string | null>(null);
 
+  const translateClusterLabel = (label: string) => {
+    const map: Record<string, string> = {
+      'Sangat Rendah': t.clusterLabels.veryLow,
+      'Rendah': t.clusterLabels.low,
+      'Menengah': t.clusterLabels.medium,
+      'Cukup Rendah': t.clusterLabels.quiteLow,
+      'Cukup Tinggi': t.clusterLabels.quiteHigh,
+      'Tinggi': t.clusterLabels.high,
+      'Sangat Tinggi': t.clusterLabels.veryHigh,
+      'Waspada Rendah': t.clusterLabels.alertLow,
+      'Waspada Tinggi': t.clusterLabels.alertHigh,
+    };
+    return map[label] || label;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
         const res = await fetch(`/api/clustering?year=${year}&mode=${mode}`);
-        if (!res.ok) throw new Error(`Gagal mengambil data clustering (${res.status})`);
-        const json = await res.json();
-        setData(json);
+        if (!res.ok) throw new Error(`${t.calculation.error} (${res.status})`);
+        const json: ClusterResult = await res.json();
+        
+        // Translate labels in meta
+        const translatedMeta = json.clusterMeta.map(m => ({
+          ...m,
+          label: translateClusterLabel(m.label)
+        }));
+        
+        setData({ ...json, clusterMeta: translatedMeta } as any);
         // Default simulation to first region
         if (json.scores) {
           setSelectedSimRegion(Object.keys(json.scores).sort()[0]);
@@ -52,61 +76,61 @@ export default function KMedoidsCalculationPage() {
       }
     };
     fetchData();
-  }, [year, mode]);
+  }, [year, mode, t]);
 
   const modeMetadata = useMemo(() => {
     switch (mode) {
       case 'direct_risk':
         return {
-          title: 'Faktor Risiko Langsung',
+          title: t.factors.directRisk,
           indicators: ['BBLR (%)', '100 - IMD (%)', '100 - ASI Eksklusif (%)'],
           formula: 'Dist(A, B) = |BBLR_A - BBLR_B| + |IMD_A - IMD_B| + |ASI_A - ASI_B|',
-          description: 'Mengelompokkan wilayah berdasarkan tingkat risiko biologis/langsung pada bayi.'
+          description: t.factors.directRiskDesc
         };
       case 'prevention_risk':
         return {
-          title: 'Faktor Risiko Pencegahan',
+          title: t.factors.effectivePrevention,
           indicators: ['100 - IDL (%)', '100 - Vitamin A (%)'],
           formula: 'Dist(A, B) = |IDL_A - IDL_B| + |VitA_A - VitA_B|',
-          description: 'Mengelompokkan wilayah berdasarkan tingkat risiko kegagalan intervensi preventif.'
+          description: t.factors.effectivePreventionDesc
         };
       case 'maternal_risk':
         return {
-          title: 'Faktor Risiko Ibu & Bayi',
+          title: t.factors.maternalHealth,
           indicators: ['100 - TTD 90 (%)', '100 - Layanan Catin (%)'],
           formula: 'Dist(A, B) = |TTD_A - TTD_B| + |Catin_A - Catin_B|',
-          description: 'Mengelompokkan wilayah berdasarkan kesehatan ibu hamil dan calon pengantin.'
+          description: t.factors.maternalHealthDesc
         };
       case 'environment_risk':
         return {
-          title: 'Faktor Risiko Lingkungan',
+          title: t.factors.environment,
           indicators: ['100 - Jamban Sehat (%)', '100 - SBS/STBM (%)'],
           formula: 'Dist(A, B) = |Jamban_A - Jamban_B| + |STBM_A - STBM_B|',
-          description: 'Mengelompokkan wilayah berdasarkan ketersediaan sanitasi dan lingkungan sehat.'
+          description: t.factors.environmentDesc
         };
       case 'comprehensive_risk':
         return {
-          title: 'Komprehensif (Semua Faktor)',
+          title: lang === 'id' ? 'Komprehensif (Semua Faktor)' : 'Comprehensive (All Factors)',
           indicators: ['Prev', 'BBLR', 'IMD', 'ASI', 'IDL', 'VitA', 'TTD', 'Catin', 'Jamban', 'STBM'],
           formula: 'Dist(A, B) = Σ |Indikator_A - Indikator_B| (10 Dimensi)',
-          description: 'Analisis menyeluruh menggabungkan prevalensi stunting dengan seluruh 9 faktor risiko.'
+          description: lang === 'id' ? 'Analisis menyeluruh menggabungkan prevalensi stunting dengan seluruh 9 faktor risiko.' : 'Comprehensive analysis combining stunting prevalence with all 9 risk factors.'
         };
       default:
         return {
-          title: 'Prevalensi Stunting',
+          title: t.mapLegend.prevalence,
           indicators: ['Prevalensi (%)'],
           formula: 'Dist(A, B) = |Prev_A - Prev_B|',
-          description: 'Mengelompokkan wilayah berdasarkan persentase kasus stunting yang ditemukan.'
+          description: lang === 'id' ? 'Mengelompokkan wilayah berdasarkan persentase kasus stunting yang ditemukan.' : 'Grouping regions based on the percentage of stunting cases found.'
         };
     }
-  }, [mode]);
+  }, [mode, t, lang]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Menghitung K-Medoids...</p>
+          <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">{t.calculation.calculating}</p>
         </div>
       </div>
     );
@@ -117,9 +141,9 @@ export default function KMedoidsCalculationPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center border border-red-100">
           <Info className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-black text-gray-900 mb-2">Terjadi Kesalahan</h2>
-          <p className="text-gray-500 text-sm mb-6">{error || 'Data tidak tersedia.'}</p>
-          <button onClick={() => router.back()} className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest">Kembali</button>
+          <h2 className="text-xl font-black text-gray-900 mb-2">{t.calculation.error}</h2>
+          <p className="text-gray-500 text-sm mb-6">{error || t.mapLegend.noData}</p>
+          <button onClick={() => router.back()} className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest">{t.common.back}</button>
         </div>
       </div>
     );
@@ -139,22 +163,22 @@ export default function KMedoidsCalculationPage() {
             </button>
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] bg-blue-50 px-1.5 py-0.5 rounded">Metodologi K-Medoids</span>
+                <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] bg-blue-50 px-1.5 py-0.5 rounded">{t.calculation.methodology}</span>
               </div>
               <h1 className="text-xl font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
                 <Calculator className="w-5 h-5 text-blue-600" />
-                Detail Perhitungan ({year})
+                {t.calculation.title} ({year})
               </h1>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-4">
             <div className="text-right">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Mode Aktif</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">{lang === 'id' ? 'Mode Aktif' : 'Active Mode'}</p>
               <p className="text-xs font-black text-gray-800">{modeMetadata.title}</p>
             </div>
             <div className="h-8 w-px bg-gray-100" />
             <div className="text-right">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette (Optimal K={data.bestK})</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Silhouette ({lang === 'id' ? 'Optimal K' : 'Optimal K'}={data.bestK})</p>
               <p className={`text-xs font-black ${data.silhouetteScore > 0.5 ? 'text-green-600' : 'text-orange-600'}`}>
                 {data.silhouetteScore.toFixed(4)}
               </p>
@@ -170,8 +194,8 @@ export default function KMedoidsCalculationPage() {
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-emerald-200">1</div>
             <div>
-              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Evaluasi Koefisien Silhouette</h2>
-              <p className="text-xs text-gray-500 font-medium">Mencari jumlah klaster (K) paling optimal berdasarkan struktur persebaran data.</p>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">{t.calculation.silhouetteTitle}</h2>
+              <p className="text-xs text-gray-500 font-medium">{t.calculation.silhouetteDesc}</p>
             </div>
           </div>
 
@@ -179,7 +203,7 @@ export default function KMedoidsCalculationPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div>
                 <p className="text-sm text-gray-600 leading-relaxed mb-6">
-                  Algoritma secara otomatis menguji nilai <b>K=2 hingga K=7</b>. Nilai K dengan skor Silhouette tertinggi dipilih sebagai model klastering terbaik untuk faktor ini.
+                  {t.calculation.silhouetteDetail}
                 </p>
                 <div className="space-y-3">
                   {data.allKResults.map((res) => (
@@ -188,7 +212,7 @@ export default function KMedoidsCalculationPage() {
                         <span className={`text-xs font-black ${res.k === data.bestK ? 'text-emerald-700' : 'text-gray-400'}`}>K = {res.k}</span>
                         {res.k === data.bestK && (
                           <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter flex items-center gap-1">
-                            <Award className="w-3 h-3" /> Paling Optimal
+                            <Award className="w-3 h-3" /> {t.calculation.optimalK}
                           </span>
                         )}
                       </div>
@@ -211,19 +235,20 @@ export default function KMedoidsCalculationPage() {
                 <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-emerald-600 mb-4">
                   <CircleQuestionMark className="w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-black text-gray-900 mb-2">Mengapa K={data.bestK}?</h3>
+                <h3 className="text-xl font-black text-gray-900 mb-2">
+                  {t.calculation.whyK.replace('{k}', data.bestK.toString())}
+                </h3>
                 <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                  Berdasarkan pemrosesan data {year}, pembagian menjadi {data.bestK} kelompok menghasilkan
-                  jarak antar klaster yang paling maksimal dan kepadatan dalam klaster yang paling baik.
+                  {t.calculation.whyKDesc.replace('{year}', year.toString()).replace('{k}', data.bestK.toString())}
                 </p>
                 <div className="flex items-center gap-8">
                   <div className="text-center">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">Input K</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">{t.calculation.inputK}</p>
                     <p className="text-2xl font-black text-gray-900">2-7</p>
                   </div>
                   <div className="w-px h-10 bg-gray-200" />
                   <div className="text-center">
-                    <p className="text-[10px] font-bold text-emerald-500 uppercase">K Terpilih</p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase">{t.calculation.selectedK}</p>
                     <p className="text-2xl font-black text-emerald-600">{data.bestK}</p>
                   </div>
                 </div>
@@ -237,7 +262,7 @@ export default function KMedoidsCalculationPage() {
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-blue-200">2</div>
             <div>
-              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Penyiapan Vektor Fitur</h2>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">{t.calculation.vectorTitle}</h2>
               <p className="text-xs text-gray-500 font-medium">{modeMetadata.description}</p>
             </div>
           </div>
@@ -248,11 +273,11 @@ export default function KMedoidsCalculationPage() {
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-gray-100">
                     <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">No</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Wilayah</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.calculation.wilayah}</th>
                     {modeMetadata.indicators.map(ind => (
                       <th key={ind} className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{ind}</th>
                     ))}
-                    <th className="px-6 py-4 text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50/50">Vektor [X, Y, ...]</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50/50">{t.calculation.vektor} [X, Y, ...]</th>
                   </tr>
                 </thead>
                 <tbody className="text-xs">
@@ -274,7 +299,7 @@ export default function KMedoidsCalculationPage() {
                   ))}
                   <tr className="bg-slate-50/30">
                     <td colSpan={modeMetadata.indicators.length + 3} className="px-6 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-                      ... Menampilkan 5 dari {data.totalRegions} Wilayah ...
+                      ... {lang === 'id' ? `Menampilkan 5 dari ${data.totalRegions} Wilayah` : `Showing 5 of ${data.totalRegions} Regions`} ...
                     </td>
                   </tr>
                 </tbody>
@@ -288,8 +313,10 @@ export default function KMedoidsCalculationPage() {
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-indigo-200">3</div>
             <div>
-              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Seleksi Medoid ({data.bestK} Klaster)</h2>
-              <p className="text-xs text-gray-500 font-medium">Titik pusat representatif sebagai prototipe setiap klaster.</p>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">
+                {t.calculation.medoidSelection.replace('{k}', data.bestK.toString())}
+              </h2>
+              <p className="text-xs text-gray-500 font-medium">{t.calculation.medoidDesc}</p>
             </div>
           </div>
 
@@ -305,13 +332,13 @@ export default function KMedoidsCalculationPage() {
                     <Target className="w-4 h-4" />
                   </div>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Vektor Medoid</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">{t.calculation.medoidVector}</p>
                 <div className="text-xl font-black text-slate-800 tracking-tighter truncate">
                   [{Array.isArray(meta.medoid) ? meta.medoid.join(', ') : meta.medoid}]
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Anggota</span>
-                  <span className="text-sm font-black text-slate-700">{meta.count} Wilayah</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{t.calculation.members}</span>
+                  <span className="text-sm font-black text-slate-700">{meta.count} {t.calculation.wilayah}</span>
                 </div>
               </div>
             ))}
@@ -323,8 +350,8 @@ export default function KMedoidsCalculationPage() {
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-orange-200">4</div>
             <div>
-              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">Simulasi Jarak Manhattan</h2>
-              <p className="text-xs text-gray-500 font-medium">Uji kedekatan satu wilayah dengan {data.bestK} medoid yang ada.</p>
+              <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">{t.calculation.manhattanTitle}</h2>
+              <p className="text-xs text-gray-500 font-medium">{t.calculation.manhattanDesc.replace('{k}', data.bestK.toString())}</p>
             </div>
           </div>
 
@@ -332,7 +359,7 @@ export default function KMedoidsCalculationPage() {
             <div className="flex flex-col md:flex-row gap-8">
               {/* Selector & Raw Info */}
               <div className="w-full md:w-1/3">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Pilih Wilayah Simulasi</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">{t.calculation.selectReg}</label>
                 <div className="relative mb-6">
                   <select
                     value={selectedSimRegion || ''}
@@ -353,7 +380,7 @@ export default function KMedoidsCalculationPage() {
                         <MapPin className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase">Input Vektor</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase">{t.calculation.inputVector}</p>
                         <p className="text-sm font-black text-gray-800">{selectedSimRegion}</p>
                       </div>
                     </div>
@@ -371,9 +398,9 @@ export default function KMedoidsCalculationPage() {
                       {/* Added Average Score to match map tooltip */}
                       {Array.isArray(data.scores[selectedSimRegion]) && (
                         <div className="pt-3 border-t border-slate-200 mt-2 flex justify-between items-center text-xs">
-                          <span className="text-blue-600 font-bold uppercase tracking-tighter">Rata-rata Skor</span>
+                          <span className="text-blue-600 font-bold uppercase tracking-tighter">{t.calculation.avgScore}</span>
                           <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                            {(data.scores[selectedSimRegion] as number[]).reduce((a, b) => a + b, 0) / (data.scores[selectedSimRegion] as number[]).length.toFixed(2)}
+                            {((data.scores[selectedSimRegion] as number[]).reduce((a, b) => a + b, 0) / (data.scores[selectedSimRegion] as number[]).length).toFixed(2)}
                           </span>
                         </div>
                       )}
@@ -386,7 +413,7 @@ export default function KMedoidsCalculationPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-4">
                   <Sigma className="w-4 h-4 text-blue-600" />
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rumus Manhattan Distance</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.calculation.formulaTitle}</span>
                 </div>
                 <div className="bg-slate-900 text-slate-300 p-6 rounded-2xl font-mono text-sm mb-8 overflow-x-auto">
                   <div className="text-blue-400 opacity-60 mb-2"># {modeMetadata.formula}</div>
@@ -423,24 +450,32 @@ export default function KMedoidsCalculationPage() {
                       <Box className="w-6 h-6" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Hasil Penetapan Klaster</p>
+                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">{t.calculation.resultTitle}</p>
                       <p className="text-sm font-medium text-gray-700 leading-relaxed">
                         {(() => {
-                          const medVector = data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].medoid;
+                          const clusterIdx = parseInt(data.clusters[selectedSimRegion]);
+                          const medVector = data.clusterMeta[clusterIdx].medoid;
                           const regVector = data.scores[selectedSimRegion];
                           const distValue = distance(
                             Array.isArray(regVector) ? regVector : [regVector],
                             Array.isArray(medVector) ? medVector : [medVector]
                           );
-                          return (
-                            <>
-                              Jarak Manhattan terkecil (<b className="text-blue-600">{distValue.toFixed(2)}</b>) ditemukan pada medoid <b>{data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].label}</b>.
-                              Maka, <b>{selectedSimRegion}</b> masuk ke kelompok
-                              <span className="ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white" style={{ backgroundColor: data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].color }}>
-                                {data.clusterMeta[parseInt(data.clusters[selectedSimRegion])].label}
-                              </span>
-                            </>
-                          );
+                          const label = data.clusterMeta[clusterIdx].label;
+                          const color = data.clusterMeta[clusterIdx].color;
+                          
+                          return t.calculation.resultDesc
+                            .split(/(\{dist\}|\{label\}|\{region\}|\{target\})/g)
+                            .map((part: string, i: number) => {
+                              if (part === '{dist}') return <b key={i} className="text-blue-600">{distValue.toFixed(2)}</b>;
+                              if (part === '{label}') return <b key={i}>{label}</b>;
+                              if (part === '{region}') return <b key={i}>{selectedSimRegion}</b>;
+                              if (part === '{target}') return (
+                                <span key={i} className="ml-2 px-3 py-1 rounded-full text-[10px] font-black uppercase text-white" style={{ backgroundColor: color }}>
+                                  {label}
+                                </span>
+                              );
+                              return part;
+                            });
                         })()}
                       </p>
                     </div>
@@ -459,7 +494,7 @@ export default function KMedoidsCalculationPage() {
                 <Sigma className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase">Best Global Silhouette</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase">{lang === 'id' ? 'Skor Silhouette Global' : 'Global Silhouette Score'}</p>
                 <p className="text-xl font-black text-gray-900">{data.silhouetteScore.toFixed(4)}</p>
               </div>
             </div>
@@ -468,8 +503,8 @@ export default function KMedoidsCalculationPage() {
                 <LayoutDashboard className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase">Optimal Klaster</p>
-                <p className="text-xl font-black text-gray-900">{data.bestK} Kelompok</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase">{t.calculation.selectedK}</p>
+                <p className="text-xl font-black text-gray-900">{data.bestK} {lang === 'id' ? 'Kelompok' : 'Groups'}</p>
               </div>
             </div>
           </div>
@@ -478,7 +513,7 @@ export default function KMedoidsCalculationPage() {
             href="/map"
             className="group flex items-center gap-3 bg-gray-900 text-white px-8 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-gray-200 hover:shadow-blue-200"
           >
-            Selesai & Ke Peta
+            {t.calculation.finished}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
         </footer>

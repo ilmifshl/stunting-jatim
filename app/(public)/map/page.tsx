@@ -6,11 +6,13 @@ import { Search, ChevronLeft, ChevronRight, Info, MapPin, BarChart2 } from 'luci
 import Link from 'next/link';
 import type { EastJavaMapProps } from '@/components/map/EastJavaMap';
 
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+
 const EastJavaMap = dynamic<EastJavaMapProps>(() => import('@/components/map/EastJavaMap'), {
   ssr: false,
   loading: () => (
     <div className="absolute inset-0 flex items-center justify-center bg-white/50 animate-pulse">
-      <span className="text-gray-500 font-medium tracking-wider">Memuat Peta Jawa Timur...</span>
+      <span className="text-gray-500 font-medium tracking-wider">Loading...</span>
     </div>
   ),
 });
@@ -19,6 +21,7 @@ import { createClient } from '@/utils/supabase/client';
 import type { ClusterResult, ClusterMeta } from '@/lib/kmedoids';
 
 export default function MapPage() {
+  const { lang, t } = useLanguage();
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [year, setYear] = useState(2024);
@@ -37,6 +40,21 @@ export default function MapPage() {
   const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
   const [isClusterLoading, setIsClusterLoading] = useState(false);
   const clusterCacheRef = useRef<Map<string, ClusterResult>>(new Map());
+
+  const translateClusterLabel = useCallback((label: string) => {
+    const map: Record<string, string> = {
+      'Sangat Rendah': t.clusterLabels.veryLow,
+      'Rendah': t.clusterLabels.low,
+      'Menengah': t.clusterLabels.medium,
+      'Cukup Rendah': t.clusterLabels.quiteLow,
+      'Cukup Tinggi': t.clusterLabels.quiteHigh,
+      'Tinggi': t.clusterLabels.high,
+      'Sangat Tinggi': t.clusterLabels.veryHigh,
+      'Waspada Rendah': t.clusterLabels.alertLow,
+      'Waspada Tinggi': t.clusterLabels.alertHigh,
+    };
+    return map[label] || label;
+  }, [t]);
 
   // Fetch available years from DB
   useEffect(() => {
@@ -77,12 +95,20 @@ export default function MapPage() {
         const res = await fetch(`/api/clustering?year=${year}&mode=${viewMode}`);
         if (!res.ok) throw Error(`HTTP ${res.status}`);
         const data: ClusterResult = await res.json();
-        clusterCacheRef.current.set(cacheKey, data);
-        setClusterResult(data);
+        
+        // Translate labels
+        const translatedMeta = data.clusterMeta.map(m => ({
+          ...m,
+          label: translateClusterLabel(m.label)
+        }));
+        const translatedData = { ...data, clusterMeta: translatedMeta };
+
+        clusterCacheRef.current.set(cacheKey, translatedData);
+        setClusterResult(translatedData);
         
         // Initialize filters
         const initialFilters: Record<string, boolean> = {};
-        data.clusterMeta.forEach(m => { initialFilters[m.id] = true; });
+        translatedData.clusterMeta.forEach(m => { initialFilters[m.id] = true; });
         setClusterFilters(initialFilters);
         
         const duration = performance.now() - startTime;
@@ -211,12 +237,12 @@ export default function MapPage() {
       >
         <div className="flex gap-1">
           {[
-            { id: 'prevalence', label: 'Prevalensi', color: 'text-blue-600', activeBg: 'bg-blue-50' },
-            { id: 'direct_risk', label: 'Risiko Langsung', color: 'text-orange-600', activeBg: 'bg-orange-50' },
-            { id: 'prevention_risk', label: 'Pencegahan', color: 'text-emerald-600', activeBg: 'bg-emerald-50' },
-            { id: 'maternal_risk', label: 'Risiko Ibu & Bayi', color: 'text-purple-600', activeBg: 'bg-purple-50' },
-            { id: 'environment_risk', label: 'Lingkungan', color: 'text-cyan-600', activeBg: 'bg-cyan-50' },
-            { id: 'comprehensive_risk', label: 'Komprehensif (Semua)', color: 'text-indigo-600', activeBg: 'bg-indigo-50' },
+            { id: 'prevalence', label: t.mapLegend.prevalence, color: 'text-blue-600', activeBg: 'bg-blue-50' },
+            { id: 'direct_risk', label: t.factors.directRisk, color: 'text-orange-600', activeBg: 'bg-orange-50' },
+            { id: 'prevention_risk', label: t.factors.effectivePrevention, color: 'text-emerald-600', activeBg: 'bg-emerald-50' },
+            { id: 'maternal_risk', label: t.factors.maternalHealth, color: 'text-purple-600', activeBg: 'bg-purple-50' },
+            { id: 'environment_risk', label: t.factors.environment, color: 'text-cyan-600', activeBg: 'bg-cyan-50' },
+            { id: 'comprehensive_risk', label: lang === 'id' ? 'Komprehensif' : 'Comprehensive', color: 'text-indigo-600', activeBg: 'bg-indigo-50' },
           ].map((modeItem) => (
             <button
               key={modeItem.id}
@@ -249,20 +275,20 @@ export default function MapPage() {
         <div className="p-5 flex-1 flex flex-col min-h-0">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2 shrink-0">
             <BarChart2 className="w-5 h-5 text-blue-600" />
-            Filter Data
+            {t.map.filterData}
           </h2>
 
           <div className="space-y-6 flex-1 overflow-y-auto pr-2 pb-2">
             {/* 1. Search Field */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Pencarian</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{t.map.search}</label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
                   type="text"
-                  placeholder="Cari wilayah atau lainnya"
+                  placeholder={t.map.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="block w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900"
@@ -272,7 +298,7 @@ export default function MapPage() {
 
             {/* 2. Year Slider */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Tahun: {year}</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{t.map.year}: {year}</label>
               <div className="px-2">
                 <input
                   type="range"
@@ -297,12 +323,12 @@ export default function MapPage() {
             <div className="transition-opacity duration-300">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  Tingkat {viewMode === 'prevalence' ? 'Prevalensi' : 'Risiko'}
+                  {viewMode === 'prevalence' ? t.map.prevalenceLevel : t.map.riskLevel}
                 </label>
                 {(isClusterLoading || isDetailLoading) && (
                   <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 animate-pulse">
                     <div className="w-2 h-2 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">Menyelaraskan...</span>
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">{t.map.aligning}</span>
                   </div>
                 )}
               </div>
@@ -319,7 +345,7 @@ export default function MapPage() {
                     className="text-[10px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
                   >
                     <Info className="w-2.5 h-2.5" />
-                    Detail
+                    {lang === 'id' ? 'Detail' : 'Details'}
                   </Link>
                 )}
               </div>
@@ -353,7 +379,7 @@ export default function MapPage() {
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mt-4">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                   <Info className="w-3 h-3" />
-                  {viewMode === 'prevalence' ? 'Nilai Medoid K-Medoids' : 'Skor Medoid K-Medoids'} ({year})
+                  {viewMode === 'prevalence' ? t.map.medoidValue : t.map.medoidScore} ({year})
                 </p>
                 <div className="space-y-1">
                   {clusterResult.clusterMeta.map((meta) => (
@@ -385,12 +411,12 @@ export default function MapPage() {
       <div className={`absolute bottom-4 z-[999] bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 flex flex-col gap-2 transition-all duration-300 ${isFilterOpen ? 'left-[352px]' : 'left-4'
         }`}>
         <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-1">
-          {viewMode === 'prevalence' ? 'Keterangan Prevalensi' : 
-           viewMode === 'direct_risk' ? 'Skor Risiko Langsung' : 
-           viewMode === 'prevention_risk' ? 'Skor Risiko Pencegahan' : 
-           viewMode === 'maternal_risk' ? 'Skor Risiko Ibu & Bayi' : 
-           viewMode === 'environment_risk' ? 'Skor Risiko Lingkungan' :
-           'Skor Risiko Komprehensif'}
+          {viewMode === 'prevalence' ? t.mapLegend.prevalence : 
+           viewMode === 'direct_risk' ? t.mapLegend.directRisk : 
+           viewMode === 'prevention_risk' ? t.mapLegend.preventionRisk : 
+           viewMode === 'maternal_risk' ? t.mapLegend.maternalRisk : 
+           viewMode === 'environment_risk' ? t.mapLegend.environmentRisk :
+           t.mapLegend.comprehensiveRisk}
         </h4>
         <div className="flex items-center gap-4 flex-wrap max-w-sm">
           {clusterResult?.clusterMeta.map((meta, idx) => (
@@ -406,7 +432,7 @@ export default function MapPage() {
         </div>
         {clusterResult && (
           <p className="text-[10px] text-blue-500 font-semibold tracking-wide text-center mt-0.5">
-            ✦ Optimasi Silhouette (K={clusterResult.bestK})
+            ✦ {t.map.silhouetteOptimization} (K={clusterResult.bestK})
           </p>
         )}
       </div>
@@ -417,7 +443,7 @@ export default function MapPage() {
           {isDetailLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center space-y-4 p-6">
               <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-              <p className="text-sm font-medium text-gray-400 font-sans">Mengambil Data Wilayah...</p>
+              <p className="text-sm font-medium text-gray-400 font-sans">{t.map.fetchingRegionData}</p>
             </div>
           ) : (
             <>
@@ -438,28 +464,29 @@ export default function MapPage() {
                 <div className="mt-8 space-y-4">
                   <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-semibold text-blue-600 uppercase">Prevalensi ({year})</span>
+                      <span className="text-xs font-semibold text-blue-600 uppercase">{t.map.prevalence} ({year})</span>
                       <p className="text-3xl font-black text-blue-900 mt-1">
                         {selectedRegion.prevalence > 0 ? `${selectedRegion.prevalence}%` : 'N/A'}
                       </p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${selectedRegion.trend === 'naik' ? 'bg-red-100 text-red-700' :
-                      selectedRegion.trend === 'turun' ? 'bg-green-100 text-green-700' :
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      (selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? 'bg-red-100 text-red-700' :
+                      (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? 'bg-green-100 text-green-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                      Trend {selectedRegion.trend === 'naik' ? '↑' : selectedRegion.trend === 'turun' ? '↓' : '—'}
+                      {t.map.trend} {(selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? '↑' : (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? '↓' : '—'}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
-                      <span className="text-xs text-gray-500">Jumlah Kasus</span>
+                      <span className="text-xs text-gray-500">{t.map.casesCount}</span>
                       <p className="text-xl font-bold text-gray-800">
                         {typeof selectedRegion.cases === 'number' ? selectedRegion.cases.toLocaleString() : 'N/A'}
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-xl text-center">
-                      <span className="text-xs text-gray-500">Status</span>
+                      <span className="text-xs text-gray-500">{t.map.status}</span>
                       {(() => {
                         const status = getStatusDisplay(selectedRegion.clusterMeta, selectedRegion.prevalence);
                         return (
@@ -484,12 +511,12 @@ export default function MapPage() {
                   )}
 
                   <div>
-                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Faktor Risiko Langsung</h4>
+                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t.map.directRiskFactors}</h4>
                     <div className="space-y-4 pt-2">
                       {[
-                        { label: 'BBLR / Prematur', value: selectedRegion.factors?.bblr, color: 'bg-red-500', reverse: false },
-                        { label: 'Cakupan IMD', value: selectedRegion.factors?.imd, color: 'bg-green-500', reverse: true },
-                        { label: 'ASI Eksklusif', value: selectedRegion.factors?.asi, color: 'bg-blue-500', reverse: true },
+                        { label: lang === 'id' ? 'BBLR / Prematur' : 'LBW / Premature', value: selectedRegion.factors?.bblr, color: 'bg-red-500', reverse: false },
+                        { label: lang === 'id' ? 'Cakupan IMD' : 'EIB Coverage', value: selectedRegion.factors?.imd, color: 'bg-green-500', reverse: true },
+                        { label: lang === 'id' ? 'ASI Eksklusif' : 'Exclusive Breastfeeding', value: selectedRegion.factors?.asi, color: 'bg-blue-500', reverse: true },
                       ].map((f) => (
                         <div key={f.label}>
                           <div className="flex justify-between text-xs mb-1.5">
@@ -514,7 +541,7 @@ export default function MapPage() {
                   href={`/map/${encodeURIComponent(selectedRegion.name)}`}
                   className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-md transition-all duration-200"
                 >
-                  Lihat detail lengkap
+                  {t.map.viewFullDetail}
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Suspense, useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 // Dynamically import the map for dashboard
 const MiniMap = dynamic(() => import('@/components/map/EastJavaMap'), {
@@ -36,11 +37,12 @@ interface StatItem {
 }
 
 export default function Home() {
+  const { lang, t } = useLanguage();
   const [stats, setStats] = useState<StatItem[]>([
-    { label: 'Rata-rata Prevalensi', value: '...', trend: null, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Total Kasus Terdata', value: '...', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Target Penurunan 2024', value: '14.0%', icon: Target, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Wilayah Terpantau', value: '...', icon: MapIcon, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: t.home.avgPrevalence, value: '...', trend: null, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
+    { label: t.home.totalCases, value: '...', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: t.home.reductionTarget, value: '14.0%', icon: Target, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: t.home.monitoredRegions, value: '...', icon: MapIcon, color: 'text-purple-600', bg: 'bg-purple-50' },
   ]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -81,7 +83,7 @@ export default function Home() {
 
         setStats([
           {
-            label: 'Rata-rata Prevalensi',
+            label: t.home.avgPrevalence,
             value: `${avgPrev.toFixed(1)}%`,
             trend: trendText,
             icon: TrendingDown,
@@ -89,21 +91,21 @@ export default function Home() {
             bg: trendValue > 0 ? 'bg-red-50' : 'bg-green-50'
           },
           {
-            label: 'Total Kasus Terdata',
+            label: t.home.totalCases,
             value: totalCases.toLocaleString(),
             icon: Users,
             color: 'text-blue-600',
             bg: 'bg-blue-50'
           },
           {
-            label: 'Target Penurunan 2024',
+            label: t.home.reductionTarget,
             value: '14.0%',
             icon: Target,
             color: 'text-green-600',
             bg: 'bg-green-50'
           },
           {
-            label: 'Wilayah Terpantau',
+            label: t.home.monitoredRegions,
             value: regionCount?.toString() || '38',
             icon: MapIcon,
             color: 'text-purple-600',
@@ -166,7 +168,7 @@ export default function Home() {
 
         setStats([
           {
-            label: 'Rata-rata Prevalensi',
+            label: t.home.avgPrevalence,
             value: `${avgPrev.toFixed(1)}%`,
             trend: trendText,
             icon: TrendingDown,
@@ -174,21 +176,21 @@ export default function Home() {
             bg: trendValue > 0 ? 'bg-red-50' : 'bg-green-50'
           },
           {
-            label: 'Total Kasus Terdata',
+            label: t.home.totalCases,
             value: totalCases.toLocaleString(),
             icon: Users,
             color: 'text-blue-600',
             bg: 'bg-blue-50'
           },
           {
-            label: 'Target Penurunan 2024',
+            label: t.home.reductionTarget,
             value: '14.0%',
             icon: Target,
             color: 'text-green-600',
             bg: 'bg-green-50'
           },
           {
-            label: 'Wilayah Terpantau',
+            label: t.home.monitoredRegions,
             value: regionCount?.toString() || '38',
             icon: MapIcon,
             color: 'text-purple-600',
@@ -213,9 +215,9 @@ export default function Home() {
             <div>
               <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2 uppercase tracking-tight">
                 <BarChart3 className="w-6 h-6 text-blue-600" />
-                Dashboard Ringkasan Stunting
+                {t.home.title}
               </h1>
-              <p className="text-gray-500 text-sm mt-1">Provinsi Jawa Timur - Data Terakhir: Maret 2024</p>
+              <p className="text-gray-500 text-sm mt-1">{t.home.subtitle}</p>
             </div>
           </div>
 
@@ -242,13 +244,13 @@ export default function Home() {
             <div className="p-5 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <MapIcon className="w-4 h-4 text-blue-600" />
-                Sebaran Geospasial (Mini Map)
+                {t.home.geospatialDistribution}
               </h3>
               <Link
                 href="/map"
                 className="inline-flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-600 px-4 py-2 rounded-xl font-bold text-xs transition-colors"
               >
-                Lihat Peta Penuh
+                {t.home.fullMap}
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -259,7 +261,7 @@ export default function Home() {
 
               {/* Overlay Legend Kecil */}
               <div className="absolute bottom-4 right-4 z-[999] bg-white/80 backdrop-blur-sm p-3 rounded-xl shadow-sm border border-gray-100 hidden md:block">
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Prevalensi</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">{t.home.prevalenceLegend}</p>
                 <div className="flex gap-3 text-gray-500">
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-red-500"></div>
@@ -286,9 +288,9 @@ export default function Home() {
             <div className="px-6 pt-6 pb-2 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-orange-500" />
-                Artikel Terkait
+                {t.home.relatedArticles}
               </h3>
-              <Link href="/articles" className="text-xs font-bold text-blue-600 hover:underline">Lihat Semua</Link>
+              <Link href="/articles" className="text-xs font-bold text-blue-600 hover:underline">{t.common.seeAll}</Link>
             </div>
 
             <div className="px-4 pt-2 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
@@ -303,7 +305,13 @@ export default function Home() {
                       {article.title}
                     </h4>
                     <span className="inline-block text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full mb-2 uppercase">
-                      {article.category || 'Wawasan'}
+                      {(() => {
+                        const cat = article.category?.toLowerCase();
+                        if (cat === 'kesehatan') return t.categories.health;
+                        if (cat === 'berita') return t.categories.news;
+                        if (cat === 'kebijakan') return t.categories.policy;
+                        return t.categories.insight;
+                      })()}
                     </span>
                   </div>
 
@@ -312,14 +320,14 @@ export default function Home() {
                   </p>
                   <div className="flex items-center justify-between mt-2 border-t border-gray-50/50">
                     <span className="text-[10px] text-gray-400 font-medium">
-                      {new Date(article.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                      {new Date(article.created_at).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}
                     </span>
                     <ChevronRight className="w-3 h-3 text-gray-300 group-hover:text-blue-500 transform group-hover:translateX(2px) transition-all" />
                   </div>
                 </Link>
               )) : (
                 <div className="py-10 text-center">
-                  <p className="text-gray-400 text-xs font-bold uppercase">Memuat Artikel...</p>
+                  <p className="text-gray-400 text-xs font-bold uppercase">{t.home.loadingArticles}</p>
                 </div>
               )}
             </div>
@@ -331,13 +339,13 @@ export default function Home() {
               <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center mb-4 backdrop-blur-sm border border-white/10">
                 <Target className="w-5 h-5 text-white" />
               </div>
-              <p className="text-[10px] font-bold text-blue-100 uppercase mb-1 tracking-widest">Aksi Strategis</p>
-              <h4 className="font-extrabold text-base mb-4 leading-tight">Pelajari Cara Menanggulangi Stunting di Wilayah Anda</h4>
+              <p className="text-[10px] font-bold text-blue-100 uppercase mb-1 tracking-widest">{t.home.strategicActionLabel}</p>
+              <h4 className="font-extrabold text-base mb-4 leading-tight">{t.home.strategicActionTitle}</h4>
               <Link
                 href="/factors"
                 className="inline-flex items-center gap-2 bg-white text-blue-700 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-50 transition-all hover:shadow-lg shadow-blue-900/20"
               >
-                Buka Faktor Risiko
+                {t.home.openRiskFactors}
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

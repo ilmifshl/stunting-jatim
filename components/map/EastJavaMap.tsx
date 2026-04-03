@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { getCachedGeometry, setCachedGeometry } from '@/utils/db-cache';
 import type { GeoJsonObject } from 'geojson';
 import type { ClusterMeta } from '@/lib/kmedoids';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk';
 
@@ -45,6 +46,7 @@ export default function EastJavaMap({
   scores = null,
   viewMode = 'prevalence',
 }: EastJavaMapProps) {
+  const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [isYearLoading, setIsYearLoading] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
@@ -230,28 +232,28 @@ export default function EastJavaMap({
 
     const clusterBadge = clusterLabel ? ` &bull; <b class="capitalize">${clusterLabel}</b>` : '';
 
-    let modeLabel = 'Prevalensi';
+    let modeLabel = t.mapLegend.prevalence;
     let colorClass = 'text-blue-600';
     let unitTag = '%';
 
     if (viewMode === 'direct_risk') {
-      modeLabel = 'Skor Risiko Langsung';
+      modeLabel = t.mapLegend.directRisk;
       colorClass = 'text-red-600';
       unitTag = '';
     } else if (viewMode === 'prevention_risk') {
-      modeLabel = 'Skor Risiko Pencegahan';
+      modeLabel = t.mapLegend.preventionRisk;
       colorClass = 'text-orange-600';
       unitTag = '';
     } else if (viewMode === 'maternal_risk') {
-      modeLabel = 'Skor Risiko Ibu & Bayi';
+      modeLabel = t.mapLegend.maternalRisk;
       colorClass = 'text-purple-600';
       unitTag = '';
     } else if (viewMode === 'environment_risk') {
-      modeLabel = 'Skor Risiko Lingkungan';
+      modeLabel = t.mapLegend.environmentRisk;
       colorClass = 'text-cyan-600';
       unitTag = '';
     } else if (viewMode === 'comprehensive_risk') {
-      modeLabel = 'Skor Risiko Komprehensif';
+      modeLabel = t.mapLegend.comprehensiveRisk;
       colorClass = 'text-indigo-600';
       unitTag = '';
     }
@@ -260,10 +262,10 @@ export default function EastJavaMap({
       ? (Array.isArray(actualScore)
         ? (actualScore.reduce((a, b) => a + b, 0) / actualScore.length).toFixed(2)
         : actualScore.toFixed(2))
-      : 'Tidak ada data';
+      : t.mapLegend.noData;
 
     const isVector = Array.isArray(actualScore);
-    const mainText = `${modeLabel}: <b class="${colorClass}">${isVector ? '(Avg) ' : ''}${formattedScore}${actualScore !== null ? unitTag : ''}</b>${clusterBadge}`;
+    const mainText = `${modeLabel}: <b class="${colorClass}">${isVector ? t.map.medoidAvg + ' ' : ''}${formattedScore}${actualScore !== null ? unitTag : ''}</b>${clusterBadge}`;
 
     layer.bindTooltip(`
       <div class="p-1.5 font-sans">
@@ -279,7 +281,7 @@ export default function EastJavaMap({
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm">
           <div className="flex flex-col items-center">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="mt-2 text-sm font-medium text-gray-600">Memuat Peta Jawa Timur...</p>
+            <p className="mt-2 text-sm font-medium text-gray-600">{t.map.loadingMap}</p>
           </div>
         </div>
       )}

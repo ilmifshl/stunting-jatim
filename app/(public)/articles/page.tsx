@@ -1,17 +1,31 @@
+'use client';
+
 import Link from 'next/link';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/client';
 import { Calendar, ArrowRight, BookOpen, Clock, Tag } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { useState, useEffect } from 'react';
 
-export default async function ArticlesPage() {
-  const supabase = await createClient();
-  const { data: articles, error } = await supabase
-    .from('articles')
-    .select('*')
-    .order('created_at', { ascending: false });
+export default function ArticlesPage() {
+  const { lang, t } = useLanguage();
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (error) {
-    console.error('Error fetching articles:', error);
-  }
+  useEffect(() => {
+    const fetchArticles = async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setArticles(data);
+      }
+      setLoading(false);
+    };
+    fetchArticles();
+  }, []);
 
   return (
     <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-500">
@@ -19,20 +33,24 @@ export default async function ArticlesPage() {
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-50 text-orange-600 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4 border border-orange-100">
             <BookOpen className="w-3 h-3" />
-            Edukasi & Berita
+            {t.articles.educationNews}
           </div>
           <h1 className="text-4xl font-black text-gray-900 leading-tight uppercase tracking-tighter">
-            Artikel <span className="text-blue-600">&</span> Wawasan
+            {t.articles.title.split('&')[0]} <span className="text-blue-600">&</span> {t.articles.title.split('&')[1]}
           </h1>
           <p className="mt-4 text-lg text-gray-500 max-w-2xl leading-relaxed font-medium">
-            Kumpulan informasi, panduan, dan berita terkini mengenai upaya pencegahan stunting di seluruh Jawa Timur.
+            {t.articles.subtitle}
           </p>
         </div>
       </div>
 
-      {!articles || articles.length === 0 ? (
+      {loading ? (
+         <div className="text-center py-24 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200">
+           <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">{t.common.loading}</p>
+         </div>
+      ) : !articles || articles.length === 0 ? (
         <div className="text-center py-24 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200">
-          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">Belum ada artikel yang tersedia</p>
+          <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">{t.articles.noArticles}</p>
         </div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
@@ -50,7 +68,7 @@ export default async function ArticlesPage() {
                 )}
                 <div className="absolute top-4 left-4">
                   <span className="px-3 py-1 bg-white/90 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-blue-600 shadow-sm border border-white">
-                    Terbaru
+                    {t.common.latest}
                   </span>
                 </div>
               </div>
@@ -60,11 +78,17 @@ export default async function ArticlesPage() {
                   <div className="flex items-center gap-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                     <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-md">
                       <Calendar className="w-3 h-3" />
-                      {new Date(article.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {new Date(article.created_at).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                     <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-md text-blue-500">
                       <Tag className="w-3 h-3" />
-                      {article.category || 'Wawasan'}
+                      {(() => {
+                        const cat = article.category?.toLowerCase();
+                        if (cat === 'kesehatan') return t.categories.health;
+                        if (cat === 'berita') return t.categories.news;
+                        if (cat === 'kebijakan') return t.categories.policy;
+                        return t.categories.insight;
+                      })()}
                     </span>
                   </div>
 
@@ -80,7 +104,7 @@ export default async function ArticlesPage() {
 
                 <div className="mt-8 pt-6 border-t border-gray-50 flex items-center justify-between">
                   <Link href={`/articles/${article.id}`} className="inline-flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-wider group/link">
-                    Baca Selengkapnya
+                    {t.common.readMore}
                     <ArrowRight className="w-4 h-4 transition-transform group-hover/link:translate-x-1" />
                   </Link>
                   <div className="flex items-center gap-1.5 text-gray-300">

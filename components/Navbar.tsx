@@ -2,16 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Map as MapIcon, BookOpen, AlertCircle } from 'lucide-react';
+import { Activity, Map as MapIcon, BookOpen, AlertCircle, Globe } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { lang, t, toggleLanguage } = useLanguage();
 
   const navItems = [
-    { name: 'Beranda', path: '/', icon: Activity },
-    { name: 'Peta Interaktif', path: '/map', icon: MapIcon },
-    { name: 'Faktor Risiko', path: '/factors', icon: AlertCircle },
-    { name: 'Artikel', path: '/articles', icon: BookOpen },
+    { name: t.navbar.home, path: '/', icon: Activity },
+    { name: t.navbar.interactiveMap, path: '/map', icon: MapIcon },
+    { name: t.navbar.riskFactors, path: '/factors', icon: AlertCircle },
+    { name: t.navbar.articles, path: '/articles', icon: BookOpen },
   ];
 
   return (
@@ -53,6 +55,16 @@ export default function Navbar() {
 
             <div className="h-6 w-px bg-gray-100 mx-2"></div>
 
+            {/* Language Toggle */}
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-all border border-transparent hover:border-blue-100"
+              title={lang === 'id' ? 'Switch to English' : 'Ubah ke Bahasa Indonesia'}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="uppercase">{lang}</span>
+            </button>
+
             <Link
               href="/login"
               className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 
@@ -63,8 +75,8 @@ export default function Navbar() {
               transition-all duration-200 ease-in-out
               focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
             >
-              <span className="flex items-center gap-2 text-sm font-medium">
-                ADMIN LOGIN
+              <span className="flex items-center gap-2 text-sm font-medium uppercase">
+                {t.common.adminLogin}
               </span>
             </Link>
           </div>
