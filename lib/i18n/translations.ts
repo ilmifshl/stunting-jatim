@@ -137,6 +137,8 @@ export const translations = {
     calculation: {
       methodology: 'Metodologi Perhitungan',
       title: 'Kalkulasi K-Medoids',
+      error: 'Gagal memuat data kalkulasi',
+      calculating: 'Menghitung...',
       silhouetteTitle: 'Evaluasi Koefisien Silhouette',
       silhouetteDesc: 'Mencari jumlah klaster (K) paling optimal berdasarkan struktur persebaran data.',
       silhouetteDetail: 'Algoritma secara otomatis menguji nilai K=2 hingga K=7. Nilai K dengan skor Silhouette tertinggi dipilih sebagai model klastering terbaik untuk faktor ini.',
@@ -312,6 +314,8 @@ export const translations = {
     calculation: {
       methodology: 'Calculation Methodology',
       title: 'K-Medoids Calculation',
+      error: 'Failed to load calculation data',
+      calculating: 'Calculating...',
       silhouetteTitle: 'Silhouette Coefficient Evaluation',
       silhouetteDesc: 'Finding the most optimal number of clusters (K) based on data distribution structure.',
       silhouetteDetail: 'The algorithm automatically tests K values from 2 to 7. The K value with the highest Silhouette score is selected as the best clustering model for this factor.',

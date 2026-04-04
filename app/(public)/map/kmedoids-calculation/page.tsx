@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import {
   ArrowLeft,
   Calculator,
@@ -21,7 +21,7 @@ import { distance } from '@/lib/kmedoids';
 import type { ClusterResult } from '@/lib/kmedoids';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
-export default function KMedoidsCalculationPage() {
+function KMedoidsCalculationContent() {
   const { lang, t } = useLanguage();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -57,13 +57,13 @@ export default function KMedoidsCalculationPage() {
         const res = await fetch(`/api/clustering?year=${year}&mode=${mode}`);
         if (!res.ok) throw new Error(`${t.calculation.error} (${res.status})`);
         const json: ClusterResult = await res.json();
-        
+
         // Translate labels in meta
         const translatedMeta = json.clusterMeta.map(m => ({
           ...m,
           label: translateClusterLabel(m.label)
         }));
-        
+
         setData({ ...json, clusterMeta: translatedMeta } as any);
         // Default simulation to first region
         if (json.scores) {
@@ -462,7 +462,7 @@ export default function KMedoidsCalculationPage() {
                           );
                           const label = data.clusterMeta[clusterIdx].label;
                           const color = data.clusterMeta[clusterIdx].color;
-                          
+
                           return t.calculation.resultDesc
                             .split(/(\{dist\}|\{label\}|\{region\}|\{target\})/g)
                             .map((part: string, i: number) => {
@@ -520,5 +520,22 @@ export default function KMedoidsCalculationPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function KMedoidsCalculationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <KMedoidsCalculationContent />
+    </Suspense>
   );
 }
