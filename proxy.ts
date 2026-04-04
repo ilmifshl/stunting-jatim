@@ -1,7 +1,12 @@
-import { updateSession } from '@/utils/supabase/middleware'
+import { updateSession } from '@/utils/supabase/proxy'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: Request) {
-  return await updateSession(request as any)
+export async function proxy(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', request.nextUrl.pathname);
+
+  // Return the updateSession result but with updated request headers
+  return await updateSession(request);
 }
 
 export const config = {

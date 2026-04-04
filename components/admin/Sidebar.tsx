@@ -6,7 +6,7 @@ import { LayoutDashboard, Users, FileText, Settings, LogOut } from 'lucide-react
 import { createClient } from '@/utils/supabase/client';
 import { toast } from 'sonner';
 
-export default function Sidebar() {
+export default function Sidebar({ userRole = 'admin' }: { userRole?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -27,6 +27,10 @@ export default function Sidebar() {
     { name: 'Faktor Risiko', href: '/admin/risk-factors', icon: Settings },
     { name: 'Manajemen Artikel', href: '/admin/articles', icon: FileText },
   ];
+
+  if (userRole === 'super_admin') {
+    menuItems.push({ name: 'User Management', href: '/admin/users', icon: Users });
+  }
 
   return (
     <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">

@@ -65,20 +65,6 @@ export default function Navbar() {
               <span className="uppercase">{lang}</span>
             </button>
 
-            <Link
-              href="/login"
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 
-              text-white font-semibold rounded-lg 
-              shadow-lg shadow-blue-500/30 
-              hover:shadow-blue-500/50 hover:-translate-y-0.5 
-              active:translate-y-0 active:scale-95
-              transition-all duration-200 ease-in-out
-              focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-            >
-              <span className="flex items-center gap-2 text-sm font-medium uppercase">
-                {t.common.adminLogin}
-              </span>
-            </Link>
           </div>
         </div>
       </div>
