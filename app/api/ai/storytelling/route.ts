@@ -60,13 +60,12 @@ export async function POST(req: NextRequest) {
         ${factorList}
 
         INSTRUKSI KHUSUS:
-        - Jelaskan apa arti angka-angka di atas dalam konteks pencegahan stunting.
-        - Jika angka rendah (misal ASI < 50%), soroti sebagai "Peringatan".
-        - Jika angka tinggi, berikan apresiasi singkat namun tetap waspada.
-        - Jelaskan hubungan antar faktor di dalam kategori ini (jika ada).
-        - Gunakan gaya bahasa yang profesional namun mudah dipahami orang awam.
-        - Gunakan format **teks** (double asterisk) untuk menyoroti angka persentase, tren (naik/turun), atau peringatan penting agar pembaca fokus pada poin utama. Berikan minimal 2 highlight.
-        - Maksimal 3 kalimat. Langsung ke inti sarinya.
+        - Jelaskan arti angka tersebut secara singkat (langsung inti insight).
+        - JANGAN definisikan istilah medis (seperti apa itu anemia atau stunting).
+        - Gunakan format **teks** (double asterisk) untuk menyoroti: angka persentase, tren (misal: **menurun tajam**, **naik signifikan**), kata peringatan kritikal, atau target yang belum tercapai.
+        - Berikan minimal 3-4 highlight agar poin penting terlihat di UI.
+        - JANGAN gunakan kalimat pembuka ("Sebagai pakar...", "Berikut adalah...").
+        - STRUKTUR: Langsung ke temuan utama dan penyebabnya. MAKSIMAL 2-3 kalimat pendek.
       `;
     } else {
       // Prompt global (existing)
@@ -87,12 +86,12 @@ export async function POST(req: NextRequest) {
         - Layanan Kes. Catin: ${currentFactors?.catin_rate || 'N/A'}%
 
         INSTRUKSI PENULISAN:
-        - Gunakan Bahasa Indonesia yang ramah, informatif, dan tidak terlalu teknis.
-        - Berikan 1-2 kalimat narasi tentang tren (naik/turun).
-        - Soroti faktor risiko mana yang paling perlu diperhatikan berdasarkan angka di atas.
-        - Gunakan format **teks** (double asterisk) untuk menyoroti angka persentase, tren penting, atau kata kunci kritis agar pembaca langsung menangkap inti pesan (colour emphasis).
-        - Akhiri dengan 1 kalimat saran motivasi untuk pemerintah daerah atau warga.
-        - Maksimal 3-4 kalimat pendek. Jangan terlalu panjang.
+        - Tulis narasi data yang sangat ringkas dan padat.
+        - Gunakan format **teks** (double asterisk) untuk menyoroti: persentase, tren (misal: **meningkat**, **tetap rendah**), faktor paling kritis, atau saran tindakan mendesak. Berikan minimal 4-5 highlight strategis.
+        - JANGAN gunakan kalimat pembuka/perkenalan (seperti "Sebagai ahli...").
+        - JANGAN jelaskan definisi medis yang umum diketahui.
+        - STRUKTUR: Temuan tren utama + Faktor dominan + 1 kalimat saran motivasi singkat.
+        - MAKSIMAL 3-4 kalimat pendek. Pastikan pesan langsung tersampaikan (straight to the point).
       `;
     }
 
