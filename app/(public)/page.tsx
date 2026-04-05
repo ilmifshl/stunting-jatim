@@ -316,7 +316,7 @@ export default function Home() {
                   </div>
 
                   <p className="text-[11px] text-gray-500 line-clamp-2 mt-2 leading-relaxed font-medium">
-                    {article.content.replace(/[#*]/g, '').substring(0, 100)}...
+                    {article.content.replace(/<[^>]*>?/gm, '').substring(0, 100)}...
                   </p>
                   <div className="flex items-center justify-between mt-2 border-t border-gray-50/50">
                     <span className="text-[10px] text-gray-400 font-medium">

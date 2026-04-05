@@ -65,10 +65,11 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
           </div>
         )}
 
-        <div className="prose prose-lg prose-blue prose-p:text-gray-600 prose-p:leading-[1.8] prose-p:font-medium text-gray-700">
-          <div className="whitespace-pre-wrap leading-relaxed">
-            {article.content}
-          </div>
+        <div className="prose prose-blue max-w-none prose-p:text-gray-600 prose-p:leading-[1.8] prose-p:font-medium text-gray-700">
+          <div 
+            className="leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: article.content }} 
+          />
         </div>
 
         <div className="mt-16 p-10 bg-blue-600 rounded-[3rem] text-white shadow-xl shadow-blue-200 relative overflow-hidden">

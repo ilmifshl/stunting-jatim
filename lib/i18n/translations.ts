@@ -75,8 +75,8 @@ export const translations = {
       deterministicAnalysis: 'Analisis Determinan Deterministik',
       sectoralStorytelling: 'Analisis Storytelling Sektoral',
       craftingNarrative: 'Merangkai narasi data...',
-      needIntervention: 'Butuh intervensi spesifik untuk wilayah ini?',
-      interventionDesc: 'Analisis stunting tahun {year} menunjukkan determinan terkuat berada pada {factor}. Segera kordinasikan dengan dinas terkait berdasarkan data granular di atas.',
+      needIntervention: 'Ingin bandingkan dengan wilayah lain?',
+      interventionDesc: 'Setiap wilayah memiliki risiko determinan yang unik. Cek wilayah lain untuk mendapatkan gambaran kondisi yang lebih menyeluruh.',
       monitorOtherRegions: 'Pantau Wilayah Lain',
     },
     map: {
@@ -252,8 +252,8 @@ export const translations = {
       deterministicAnalysis: 'Deterministic Determinant Analysis',
       sectoralStorytelling: 'Sectoral Storytelling Analysis',
       craftingNarrative: 'Crafting data narrative...',
-      needIntervention: 'Need specific intervention for this region?',
-      interventionDesc: 'Stunting analysis for {year} shows the strongest determinant is in {factor}. Immediately coordinate with relevant agencies based on the granular data above.',
+      needIntervention: 'Want to compare with other regions?',
+      interventionDesc: 'Each region has unique risk determinants. Check other regions to get a more comprehensive overview of the conditions.',
       monitorOtherRegions: 'Monitor Other Regions',
     },
     map: {

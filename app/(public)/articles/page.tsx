@@ -97,7 +97,7 @@ export default function ArticlesPage() {
                       {article.title}
                     </h3>
                     <p className="text-sm text-gray-500 font-medium line-clamp-3 leading-relaxed">
-                      {article.content.replace(/[#*]/g, '').substring(0, 160)}...
+                      {article.content.replace(/<[^>]*>?/gm, '').substring(0, 160)}...
                     </p>
                   </Link>
                 </div>

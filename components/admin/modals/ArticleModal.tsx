@@ -5,6 +5,7 @@ import { X, Check, Image as ImageIcon, Upload, Loader2, AlertCircle } from 'luci
 import { createClient } from '@/utils/supabase/client';
 import { uploadFile } from '@/utils/supabase/upload';
 import { toast } from 'sonner';
+import TiptapEditor from '../TiptapEditor';
 
 interface ArticleModalProps {
   isOpen: boolean;
@@ -231,13 +232,9 @@ export default function ArticleModal({
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-black text-gray-500 uppercase tracking-widest pl-1">Isi Artikel</label>
-                <textarea
-                  required
-                  rows={8}
-                  placeholder="Tuliskan isi artikel lengkap di sini dengan detail..."
-                  value={formData.content}
-                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-[2rem] text-sm leading-relaxed text-gray-700 focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 focus:bg-white outline-none transition-all placeholder:text-gray-400 resize-none"
+                <TiptapEditor 
+                  content={formData.content} 
+                  onChange={(content) => setFormData({ ...formData, content })} 
                 />
               </div>
 
