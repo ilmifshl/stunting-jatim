@@ -3,11 +3,16 @@ import { createClient } from '@/utils/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const apiKey = process.env.GEMINI_API_KEY || '';
+const genAI = new GoogleGenerativeAI(apiKey);
 
 export async function POST(req: NextRequest) {
   try {
     const { regionName, year, category, categoryData } = await req.json();
+
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API Key Gemini belum dikonfigurasi di server.' }, { status: 500 });
+    }
 
     if (!regionName || !year) {
       return NextResponse.json({ error: 'Region and Year are required' }, { status: 400 });
@@ -95,21 +100,34 @@ export async function POST(req: NextRequest) {
       `;
     }
 
-    // 3. Generate dengan Fallback Mechanism
+    // 3. Generate dengan Fallback Mechanism Berjenjang
     let result;
-    try {
-      // Coba model Generasi Kedua: Gemini 2.5 Flash yang tersedia di API Key ini
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      result = await model.generateContent(prompt);
-    } catch (apiError: any) {
-      if (apiError.message?.includes('404') || apiError.message?.includes('not found')) {
-        console.warn('Gemini 2.5 Flash tidak tersedia, mencoba versi Pro...');
-        // Coba model 2.5 pro sebagai cadangan
-        const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-        result = await fallbackModel.generateContent(prompt);
-      } else {
-        throw apiError;
+    const modelSequence = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite'];
+    let lastError: any = null;
+
+    for (const modelName of modelSequence) {
+      try {
+        console.log(`[AI Storytelling] Mencoba menggunakan model: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        result = await model.generateContent(prompt);
+        if (result) break; // Berhasil
+      } catch (err: any) {
+        lastError = err;
+        const errorMsg = err.message?.toLowerCase() || '';
+        const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('limit');
+        const isNotFound = errorMsg.includes('404') || errorMsg.includes('not found') || errorMsg.includes('unsupported');
+        
+        if (isRateLimit || isNotFound) {
+          console.warn(`[AI Storytelling] Model ${modelName} ${isRateLimit ? 'terkena limit' : 'tidak tersedia'}, mencoba model fallback...`);
+          continue; // Coba model berikutnya di sequence
+        }
+        // Jika error tipe lain (misal auth), lempar ke catch luar
+        throw err;
       }
+    }
+
+    if (!result) {
+      throw lastError || new Error('Semua model AI gagal menghasilkan respon.');
     }
 
     const responseText = result.response.text();
