@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
         - Jika angka tinggi, berikan apresiasi singkat namun tetap waspada.
         - Jelaskan hubungan antar faktor di dalam kategori ini (jika ada).
         - Gunakan gaya bahasa yang profesional namun mudah dipahami orang awam.
+        - Gunakan format **teks** (double asterisk) untuk menyoroti angka persentase, tren (naik/turun), atau peringatan penting agar pembaca fokus pada poin utama. Berikan minimal 2 highlight.
         - Maksimal 3 kalimat. Langsung ke inti sarinya.
       `;
     } else {
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
         - Gunakan Bahasa Indonesia yang ramah, informatif, dan tidak terlalu teknis.
         - Berikan 1-2 kalimat narasi tentang tren (naik/turun).
         - Soroti faktor risiko mana yang paling perlu diperhatikan berdasarkan angka di atas.
+        - Gunakan format **teks** (double asterisk) untuk menyoroti angka persentase, tren penting, atau kata kunci kritis agar pembaca langsung menangkap inti pesan (colour emphasis).
         - Akhiri dengan 1 kalimat saran motivasi untuk pemerintah daerah atau warga.
         - Maksimal 3-4 kalimat pendek. Jangan terlalu panjang.
       `;

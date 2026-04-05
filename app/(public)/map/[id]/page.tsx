@@ -177,6 +177,24 @@ export default function RegionDetailPage() {
     }
   };
 
+  const renderFormattedText = (text: string | null) => {
+    if (!text) return null;
+
+    // Split by **text** pattern
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const cleanText = part.slice(2, -2);
+        return (
+          <strong key={index} className="font-bold text-blue-700 bg-blue-50/50 px-1 py-0.2 rounded-md mx-0.5 shadow-sm border border-blue-100/50 inline-block not-italic">
+            {cleanText}
+          </strong>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -345,13 +363,13 @@ export default function RegionDetailPage() {
                     <LayoutDashboard className="w-4 h-4 text-blue-600" />
                     {t.mapDetail.aiStorytellingTitle}
                   </h3>
-                  <p className="text-[10px] text-slate-500 font-bold  tracking-wider mt-1">{t.mapDetail.aiStorytellingDesc}</p>
+                  <p className="text-[10px] text-slate-500 font-bold tracking-wider mt-1">{t.mapDetail.aiStorytellingDesc}</p>
                 </div>
 
                 {!aiStory && !isAiLoading && (
                   <button
                     onClick={handleGenerateAiStory}
-                    className="group/btn flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl font-black text-[10px]  tracking-widest hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 transform active:scale-95"
+                    className="group/btn flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl font-black text-[10px] tracking-widest hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 transform active:scale-95"
                   >
                     <Info className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
                     {t.mapDetail.generateAnalysis}
@@ -361,7 +379,7 @@ export default function RegionDetailPage() {
                 {isAiLoading && (
                   <div className="flex items-center gap-4 text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-[10px] font-black  tracking-widest animate-pulse">{t.mapDetail.aiGenerating}</span>
+                    <span className="text-[10px] font-black tracking-widest animate-pulse">{t.mapDetail.aiGenerating}</span>
                   </div>
                 )}
               </div>
@@ -370,7 +388,7 @@ export default function RegionDetailPage() {
                 <div className="bg-gradient-to-br from-slate-50 to-white rounded-[2rem] p-8 border border-slate-100 relative group/ai shadow-inner">
                   <div className="absolute top-0 right-0 p-6 flex items-center gap-2">
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-[8px] font-black text-emerald-600  tracking-[0.2em]">{t.mapDetail.liveInsight}</span>
+                    <span className="text-[8px] font-black text-emerald-600 tracking-[0.2em]">{t.mapDetail.liveInsight}</span>
                   </div>
 
                   <div className="flex gap-6">
@@ -381,13 +399,13 @@ export default function RegionDetailPage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-lg text-slate-700 font-medium leading-relaxed italic md:pr-20">
-                        "{aiStory}"
+                        "{renderFormattedText(aiStory)}"
                       </p>
                       <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <p className="text-[9px] font-bold text-slate-400  tracking-widest">{t.mapDetail.modelInfo}</p>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-widest">{t.mapDetail.modelInfo}</p>
                         <button
                           onClick={handleGenerateAiStory}
-                          className="text-[9px] font-black text-blue-600  tracking-widest hover:underline decoration-2 underline-offset-4 transition-all"
+                          className="text-[9px] font-black text-blue-600 tracking-widest hover:underline decoration-2 underline-offset-4 transition-all"
                         >
                           {t.common.updateAnalysis}
                         </button>
@@ -400,7 +418,7 @@ export default function RegionDetailPage() {
               {!aiStory && !isAiLoading && (
                 <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
                   <Info className="w-10 h-10 text-slate-200 mb-4" />
-                  <p className="text-xs font-bold text-slate-400  tracking-widest text-center">
+                  <p className="text-xs font-bold text-slate-400 tracking-widest text-center">
                     {lang === 'id' ? 'Klik tombol di atas untuk mendapatkan' : 'Click the button above to get'}<br />{lang === 'id' ? 'insight data secara otomatis' : 'data insights automatically'}
                   </p>
                 </div>
@@ -410,11 +428,11 @@ export default function RegionDetailPage() {
 
           <div className="bg-white rounded-[3rem] p-8 border border-slate-200/60 shadow-2xl shadow-blue-900/5 flex flex-col">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xs font-black text-gray-900  tracking-widest flex items-center gap-2">
+              <h3 className="text-xs font-black text-gray-900 tracking-widest flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-blue-600" />
                 {t.mapDetail.prevalenceTrend}
               </h3>
-              <span className="text-[10px] font-black text-slate-400  tracking-widest">{t.mapDetail.multiYear}</span>
+              <span className="text-[10px] font-black text-slate-400 tracking-widest">{t.mapDetail.multiYear}</span>
             </div>
             <div className="flex-1 min-h-[220px]">
               <AdminTrendChart data={stuntingHistory} />
@@ -425,7 +443,7 @@ export default function RegionDetailPage() {
         {/* Detailed Factors Grid */}
         <div className="space-y-8">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-black text-gray-900  tracking-tight">{t.mapDetail.deterministicAnalysis}</h2>
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">{t.mapDetail.deterministicAnalysis}</h2>
             <div className="flex-1 h-px bg-gray-100"></div>
           </div>
 
@@ -480,8 +498,8 @@ export default function RegionDetailPage() {
                       <Icon className="w-7 h-7" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-black text-gray-900  tracking-tight leading-none mb-1">{group.title}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold  tracking-wider">{group.description}</p>
+                      <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none mb-1">{group.title}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold tracking-wider">{group.description}</p>
                     </div>
                   </div>
 
@@ -495,7 +513,7 @@ export default function RegionDetailPage() {
                             <span className="text-xs font-black text-gray-900 italic tracking-widest underline decoration-blue-200 underline-offset-4 decoration-2">
                               {item.count?.toLocaleString() || 0}
                             </span>
-                            <span className="text-[9px] font-bold text-gray-500 ">
+                            <span className="text-[9px] font-bold text-gray-500">
                               {item.unit.replace('% ', '')}
                             </span>
                           </div>
@@ -520,7 +538,7 @@ export default function RegionDetailPage() {
                     {!hasStory && !isGroupLoading && (
                       <button
                         onClick={() => handleGenerateSectorStory(group.title, group.items)}
-                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-50 text-slate-500 ${colors.btnHover} border border-dashed border-slate-200 transition-all font-black text-[10px]  tracking-widest`}
+                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-50 text-slate-500 ${colors.btnHover} border border-dashed border-slate-200 transition-all font-black text-[10px] tracking-widest`}
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         {t.mapDetail.sectoralStorytelling}
@@ -530,7 +548,7 @@ export default function RegionDetailPage() {
                     {isGroupLoading && (
                       <div className="flex items-center justify-center gap-3 py-3 text-blue-600 animate-pulse">
                         <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-[9px] font-black  tracking-widest">{t.mapDetail.craftingNarrative}</span>
+                        <span className="text-[9px] font-black tracking-widest">{t.mapDetail.craftingNarrative}</span>
                       </div>
                     )}
 
@@ -542,11 +560,11 @@ export default function RegionDetailPage() {
                           </div>
                           <div>
                             <p className="text-base text-slate-600 font-medium leading-relaxed italic">
-                              "{sectorStories[group.title]}"
+                              "{renderFormattedText(sectorStories[group.title])}"
                             </p>
                             <button
                               onClick={() => handleGenerateSectorStory(group.title, group.items)}
-                              className="mt-2 text-[12px] font-black text-blue-600  tracking-widest hover:underline"
+                              className="mt-2 text-[12px] font-black text-blue-600 tracking-widest hover:underline"
                             >
                               {t.mapDetail.refreshAnalysis || (lang === 'id' ? 'Perbarui Analisis' : 'Refresh Analysis')}
                             </button>
