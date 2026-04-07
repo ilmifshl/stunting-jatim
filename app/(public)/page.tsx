@@ -46,86 +46,34 @@ export default function Home() {
   ]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [clusterMapData, setClusterMapData] = useState<Record<string, string> | null>(null);
+  const [clusterMeta, setClusterMeta] = useState<any[] | null>(null);
 
+  // Fetch Clustering Data for MiniMap (Year 2024)
   useEffect(() => {
-    const fetchStats = async () => {
-      const supabase = createClient();
-      const currentYear = 2023; // Assuming 2023 is the latest full data year
-      const prevYear = 2022;
-
-      // 1. Get stunting data for current and prev year
-      const { data: currentData } = await supabase
-        .from('stunting_data')
-        .select('prevalence, stunting_cases')
-        .eq('year', currentYear);
-
-      const { data: prevData } = await supabase
-        .from('stunting_data')
-        .select('prevalence')
-        .eq('year', prevYear);
-
-      // 2. Count regions
-      const { count: regionCount } = await supabase
-        .from('regions')
-        .select('*', { count: 'exact', head: true });
-
-      if (currentData) {
-        const avgPrev = currentData.reduce((acc, curr) => acc + curr.prevalence, 0) / currentData.length;
-        const totalCases = currentData.reduce((acc, curr) => acc + curr.stunting_cases, 0);
-
-        let avgPrevPrev = 0;
-        if (prevData && prevData.length > 0) {
-          avgPrevPrev = prevData.reduce((acc, curr) => acc + curr.prevalence, 0) / prevData.length;
+    const fetchClusterData = async () => {
+      try {
+        const res = await fetch('/api/clustering?year=2024&mode=prevalence');
+        if (res.ok) {
+          const data = await res.json();
+          setClusterMapData(data.clusters);
+          setClusterMeta(data.clusterMeta);
         }
-
-        const trendValue = avgPrev - avgPrevPrev;
-        const trendText = trendValue > 0 ? `+${trendValue.toFixed(1)}%` : `${trendValue.toFixed(1)}%`;
-
-        setStats([
-          {
-            label: t.home.avgPrevalence,
-            value: `${avgPrev.toFixed(1)}%`,
-            trend: trendText,
-            icon: TrendingDown,
-            color: trendValue > 0 ? 'text-red-600' : 'text-green-600',
-            bg: trendValue > 0 ? 'bg-red-50' : 'bg-green-50'
-          },
-          {
-            label: t.home.totalCases,
-            value: totalCases.toLocaleString(),
-            icon: Users,
-            color: 'text-blue-600',
-            bg: 'bg-blue-50'
-          },
-          {
-            label: t.home.reductionTarget,
-            value: '14.0%',
-            icon: Target,
-            color: 'text-green-600',
-            bg: 'bg-green-50'
-          },
-          {
-            label: t.home.monitoredRegions,
-            value: regionCount?.toString() || '38',
-            icon: MapIcon,
-            color: 'text-purple-600',
-            bg: 'bg-purple-50'
-          },
-        ]);
+      } catch (err) {
+        console.error('Error fetching cluster data for minimap:', err);
       }
-      setIsLoading(false);
     };
-
-    fetchStats();
+    fetchClusterData();
   }, []);
+
 
   const [recentArticles, setRecentArticles] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       const supabase = createClient();
-      const currentYear = 2023;
-      const prevYear = 2022;
+      const currentYear = 2024; 
+      const prevYear = 2023;
 
       // 1. Get stunting data for current and prev year
       const { data: currentData } = await supabase
@@ -154,7 +102,7 @@ export default function Home() {
         setRecentArticles(articlesData);
       }
 
-      if (currentData) {
+      if (currentData && currentData.length > 0) {
         const avgPrev = currentData.reduce((acc, curr) => acc + curr.prevalence, 0) / currentData.length;
         const totalCases = currentData.reduce((acc, curr) => acc + curr.stunting_cases, 0);
 
@@ -197,12 +145,16 @@ export default function Home() {
             bg: 'bg-purple-50'
           },
         ]);
+      } else {
+        // Fallback or retry with 2023 if 2024 has no data yet
+        console.warn('No 2024 data found, you might want to check the database or use 2023.');
       }
       setIsLoading(false);
     };
 
-    fetchStats();
-  }, []);
+    fetchData();
+  }, [t]);
+
 
   return (
     <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-500">
@@ -256,8 +208,14 @@ export default function Home() {
             </div>
             <div className="flex-1 relative">
               <Suspense fallback={<div>Loading Map...</div>}>
-                <MiniMap isMini={true} />
+                <MiniMap 
+                  isMini={true} 
+                  year={2024}
+                  clusterData={clusterMapData}
+                  clusterMeta={clusterMeta}
+                />
               </Suspense>
+
 
               {/* Overlay Legend Kecil */}
               <div className="absolute bottom-4 right-4 z-[999] bg-white/80 backdrop-blur-sm p-3 rounded-xl shadow-sm border border-gray-100 hidden md:block">

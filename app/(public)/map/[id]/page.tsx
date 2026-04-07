@@ -355,7 +355,7 @@ export default function RegionDetailPage() {
               </div>
             </div>
 
-            {/* AI Insight Section - Now inside the same section card, at the bottom tier */}
+            {/* AI Insight Section */}
             <div className="mt-4 pt-4 border-t border-slate-100 relative">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
                 <div>
