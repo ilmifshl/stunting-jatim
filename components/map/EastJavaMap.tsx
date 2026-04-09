@@ -7,7 +7,7 @@ import type { GeoJsonObject } from 'geojson';
 import type { ClusterMeta } from '@/lib/kmedoids';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
-export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk';
+export type HeatmapMode = 'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk' | 'trend';
 
 export interface EastJavaMapProps {
   selectedRegion?: string;
@@ -32,6 +32,10 @@ export interface EastJavaMapProps {
   scores?: Record<string, number | number[]> | null;
   /** Active heatmap mode — determines tooltip label text only. Coloring is always from clusterData. */
   viewMode?: HeatmapMode;
+  /** Custom data for trend mode (red/green coloring) */
+  trendData?: Record<string, 'naik' | 'turun' | 'tetap' | null> | null;
+  /** Map of trend filter states (naik, turun, tetap, noData) */
+  trendFilters?: Record<string, boolean>;
 }
 
 export default function EastJavaMap({
@@ -45,6 +49,8 @@ export default function EastJavaMap({
   clusterMeta = null,
   scores = null,
   viewMode = 'prevalence',
+  trendData = null,
+  trendFilters = { naik: true, turun: true, tetap: true, noData: true }
 }: EastJavaMapProps) {
   const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(true);
@@ -170,6 +176,14 @@ export default function EastJavaMap({
       let matchFilter = clusterId === null; // regions with no cluster (grey) are always shown
       if (clusterId !== null && (clusterFilters[clusterId] ?? true)) matchFilter = true;
 
+      // Filter by trend in trend mode
+      if (viewMode === 'trend') {
+        const trend = trendData?.[name];
+        const trendId = trend === 'naik' ? 'naik' : trend === 'turun' ? 'turun' : trend === 'tetap' ? 'tetap' : 'noData';
+        if (!(trendFilters[trendId] ?? true)) matchFilter = false;
+        else matchFilter = true; // Override cluster filter in trend mode
+      }
+
       if (matchSearch && matchFilter) {
         features.push({
           type: 'Feature',
@@ -180,10 +194,23 @@ export default function EastJavaMap({
     });
 
     return { type: 'FeatureCollection', features } as GeoJsonObject;
-  }, [year, searchQuery, clusterFilters, dataVersion, isLoading, clusterData, scores]);
+  }, [year, searchQuery, clusterFilters, trendFilters, dataVersion, isLoading, clusterData, scores, viewMode, trendData]);
 
   const getStyle = (feature: any) => {
     const isSelected = selectedRegionRef.current === feature.properties.name;
+
+    if (viewMode === 'trend') {
+      const trend = trendData?.[feature.properties.name];
+      const fill = trend === 'naik' ? '#ef4444' : trend === 'turun' ? '#22c55e' : trend === 'tetap' ? '#3b82f6' : '#94a3b8';
+      return {
+        fillColor: fill,
+        weight: isSelected ? 3 : 1,
+        opacity: 1,
+        color: isSelected ? '#2563eb' : 'white',
+        fillOpacity: isSelected ? 0.85 : (trend ? 0.65 : 0.35),
+      };
+    }
+
     const clusterId: string | null = feature.properties.clusterId;
     const fillColor = clusterId !== null ? clusterColorMap[clusterId] : '#94a3b8';
     return {
@@ -195,40 +222,34 @@ export default function EastJavaMap({
     };
   };
 
-  // Sync styles manually when selectedRegion changes to prevent full GeoJSON remounts
-  useEffect(() => {
-    if (geoJsonRef.current) {
-      geoJsonRef.current.eachLayer((layer: any) => {
-        if (layer.feature) {
-          layer.setStyle(getStyle(layer.feature));
-        }
-      });
-    }
-  }, [selectedRegion, clusterColorMap]);
+  const getStyleRef = useRef<any>(null);
+  getStyleRef.current = getStyle;
 
-  const onEachFeature = (feature: any, layer: any) => {
-    layer.on({
-      mouseover: (e: any) => {
-        if (selectedRegionRef.current !== feature.properties.name) {
-          e.target.setStyle({ weight: 2, color: '#60a5fa', fillOpacity: 0.75 });
-        }
-      },
-      mouseout: (e: any) => {
-        if (selectedRegionRef.current !== feature.properties.name) {
-          e.target.setStyle(getStyle(feature));
-        }
-      },
-      click: () => {
-        if (setSelectedRegion) setSelectedRegion(feature.properties.name);
-      },
-    });
+  const getTooltipContentRef = useRef<any>(null);
 
+  const getTooltipContent = (feature: any) => {
     const { prevalence, score: scoreFromProps, clusterId } = feature.properties;
     const clusterLabel = clusterId !== null ? clusterLabelMap[clusterId] : null;
 
     const actualScore = scoreFromProps !== null
       ? scoreFromProps
       : (viewMode === 'prevalence' ? prevalence : null);
+
+    if (viewMode === 'trend') {
+      const trend = trendData?.[feature.properties.name];
+      const trendText = trend === 'naik' ? '↑ ' + t.mapLegend.trendRising : trend === 'turun' ? '↓ ' + t.mapLegend.trendFalling : trend === 'tetap' ? '— ' + t.mapLegend.trendSteady : t.mapLegend.trendNoComparison;
+      const trendColor = trend === 'naik' ? 'text-red-600' : trend === 'turun' ? 'text-green-600' : trend === 'tetap' ? 'text-blue-600' : 'text-gray-500';
+      const mainText = `${t.map.trend}: <b class="${trendColor}">${trendText}</b>`;
+
+      return `
+        <div class="p-1.5 font-sans">
+          <strong class="text-sm text-gray-900 block border-b pb-1 mb-1">${feature.properties.name} (${year})</strong>
+          <span class="text-xs text-gray-600">${mainText}</span>
+          <br/>
+          <span class="text-[10px] text-gray-400 font-medium">${t.map.prevalence}: ${prevalence}%</span>
+        </div>
+      `;
+    }
 
     const clusterBadge = clusterLabel ? ` &bull; <b class="capitalize">${clusterLabel}</b>` : '';
 
@@ -267,12 +288,48 @@ export default function EastJavaMap({
     const isVector = Array.isArray(actualScore);
     const mainText = `${modeLabel}: <b class="${colorClass}">${isVector ? t.map.medoidAvg + ' ' : ''}${formattedScore}${actualScore !== null ? unitTag : ''}</b>${clusterBadge}`;
 
-    layer.bindTooltip(`
+    return `
       <div class="p-1.5 font-sans">
         <strong class="text-sm text-gray-900 block border-b pb-1 mb-1">${feature.properties.name} (${year})</strong>
         <span class="text-xs text-gray-600">${mainText}</span>
       </div>
-    `, { sticky: true, className: 'rounded-lg border-none shadow-md bg-white/95 backdrop-blur-sm' });
+    `;
+  };
+
+  getTooltipContentRef.current = getTooltipContent;
+
+  // Sync styles manually when selectedRegion changes to prevent full GeoJSON remounts
+  useEffect(() => {
+    if (geoJsonRef.current) {
+      geoJsonRef.current.eachLayer((layer: any) => {
+        if (layer.feature) {
+          layer.setStyle(getStyleRef.current(layer.feature));
+          if (layer.getTooltip()) {
+            layer.setTooltipContent(getTooltipContentRef.current(layer.feature));
+          }
+        }
+      });
+    }
+  }, [selectedRegion, clusterColorMap, viewMode, trendData, year, t]);
+
+  const onEachFeature = (feature: any, layer: any) => {
+    layer.on({
+      mouseover: (e: any) => {
+        if (selectedRegionRef.current !== feature.properties.name) {
+          e.target.setStyle({ weight: 2, color: '#60a5fa', fillOpacity: 0.75 });
+        }
+      },
+      mouseout: (e: any) => {
+        if (selectedRegionRef.current !== feature.properties.name) {
+          e.target.setStyle(getStyleRef.current(feature));
+        }
+      },
+      click: () => {
+        if (setSelectedRegion) setSelectedRegion(feature.properties.name);
+      },
+    });
+
+    layer.bindTooltip(getTooltipContentRef.current(feature), { sticky: true, className: 'rounded-lg border-none shadow-md bg-white/95 backdrop-blur-sm' });
   };
 
   return (
@@ -302,9 +359,9 @@ export default function EastJavaMap({
         {geoData && (
           <GeoJSON
             ref={geoJsonRef}
-            key={`${year}-${viewMode}-${searchQuery}-${JSON.stringify(clusterFilters)}-${dataVersion}-${clusterData ? Object.keys(clusterData).length : 'nodata'}`}
+            key={`${year}-${viewMode}-${searchQuery}-${JSON.stringify(clusterFilters)}-${JSON.stringify(trendFilters)}-${dataVersion}-${clusterData ? Object.keys(clusterData).length : 'nodata'}-${trendData ? JSON.stringify(trendData) : 'notrend'}`}
             data={geoData}
-            style={getStyle}
+            style={getStyleRef.current}
             onEachFeature={onEachFeature}
           />
         )}

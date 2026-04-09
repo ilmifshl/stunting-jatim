@@ -34,7 +34,17 @@ export default function MapPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // Heatmap View Mode
-  const [viewMode, setViewMode] = useState<'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk'>('prevalence');
+  const [viewMode, setViewMode] = useState<'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk' | 'comprehensive_risk' | 'trend'>('prevalence');
+
+  // Trend Data for 'trend' mode
+  const [trendData, setTrendData] = useState<Record<string, 'naik' | 'turun' | 'tetap' | null>>({});
+  const [trendStats, setTrendStats] = useState({ naik: 0, turun: 0, tetap: 0, noData: 0 });
+  const [trendFilters, setTrendFilters] = useState<Record<string, boolean>>({
+    naik: true,
+    turun: true,
+    tetap: true,
+    noData: true
+  });
 
   // K-Medoids: one result per active view, with a ref-cache keyed by "year-mode"
   const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
@@ -77,7 +87,12 @@ export default function MapPage() {
 
   // Fetch K-Medoids whenever year or viewMode changes
   useEffect(() => {
-    const cacheKey = `v7-${year}-${viewMode}`;
+    if (viewMode === 'trend') {
+      setClusterResult(null);
+      return;
+    }
+
+    const cacheKey = `v8-${year}-${viewMode}`;
     if (clusterCacheRef.current.has(cacheKey)) {
       const cached = clusterCacheRef.current.get(cacheKey)!;
       setClusterResult(cached);
@@ -122,6 +137,52 @@ export default function MapPage() {
     };
     fetchClusters();
   }, [year, viewMode]);
+
+  // Fetch Trends whenever year changes
+  useEffect(() => {
+    const fetchTrends = async () => {
+      try {
+        const supabase = createClient();
+        
+        // Fetch current and previous year data
+        const { data: currentData } = await supabase.from('stunting_data').select('prevalence, regions:regions(name)').eq('year', year);
+        const { data: prevData } = await supabase.from('stunting_data').select('prevalence, regions:regions(name)').eq('year', year - 1);
+
+        const currMap = new Map((currentData as any[])?.map(d => [d.regions?.name, d.prevalence]));
+        const prevMap = new Map((prevData as any[])?.map(d => [d.regions?.name, d.prevalence]));
+
+        const trends: Record<string, 'naik' | 'turun' | 'tetap' | null> = {};
+        let naik = 0, turun = 0, tetap = 0, noData = 0;
+
+        currMap.forEach((currVal, name) => {
+          if (name) {
+            const prevVal = prevMap.get(name);
+            if (prevVal === undefined || prevVal === null) {
+              trends[name] = null;
+              noData++;
+            } else {
+              if (currVal > prevVal) {
+                trends[name] = 'naik';
+                naik++;
+              } else if (currVal < prevVal) {
+                trends[name] = 'turun';
+                turun++;
+              } else {
+                trends[name] = 'tetap';
+                tetap++;
+              }
+            }
+          }
+        });
+
+        setTrendData(trends);
+        setTrendStats({ naik, turun, tetap, noData });
+      } catch (err) {
+        console.error('Failed to calculate trends:', err);
+      }
+    };
+    fetchTrends();
+  }, [year]);
 
   // Map selection handler
   const handleSelectRegion = useCallback((regionName: string) => {
@@ -168,7 +229,8 @@ export default function MapPage() {
 
         let trend = 'tetap';
         if (currentStunting && prevStunting) {
-          trend = currentStunting.prevalence > prevStunting.prevalence ? 'naik' : 'turun';
+          trend = currentStunting.prevalence > prevStunting.prevalence ? 'naik' : 
+                  currentStunting.prevalence < prevStunting.prevalence ? 'turun' : 'tetap';
         }
 
         // Determine cluster metadata from K-Medoids result
@@ -228,6 +290,8 @@ export default function MapPage() {
           clusterMeta={clusterResult?.clusterMeta ?? null}
           scores={clusterResult?.scores ?? null}
           viewMode={viewMode}
+          trendData={trendData}
+          trendFilters={trendFilters}
         />
       </Suspense>
 
@@ -243,6 +307,7 @@ export default function MapPage() {
             { id: 'maternal_risk', label: t.factors.maternalHealth, color: 'text-purple-600', activeBg: 'bg-purple-50' },
             { id: 'environment_risk', label: t.factors.environment, color: 'text-cyan-600', activeBg: 'bg-cyan-50' },
             { id: 'comprehensive_risk', label: lang === 'id' ? 'Komprehensif' : 'Comprehensive', color: 'text-indigo-600', activeBg: 'bg-indigo-50' },
+            { id: 'trend', label: t.map.annualTrend, color: 'text-amber-600', activeBg: 'bg-amber-50' },
           ].map((modeItem) => (
             <button
               key={modeItem.id}
@@ -319,8 +384,8 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* 3. K-Medoids Dynamic Checkboxes */}
-            <div className="transition-opacity duration-300">
+            {/* 3. K-Medoids Dynamic Checkboxes (hidden in trend mode) */}
+            <div className={`transition-all duration-300 ${viewMode === 'trend' ? 'opacity-0 h-0 overflow-hidden pointer-events-none' : 'opacity-100'}`}>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-700">
                   {viewMode === 'prevalence' ? t.map.prevalenceLevel : t.map.riskLevel}
@@ -365,7 +430,7 @@ export default function MapPage() {
                         {meta.label} <span className="text-gray-400 font-normal text-[10px]">
                           {thresholds && thresholds[idx-1] !== undefined && thresholds[idx] !== undefined ? `(${thresholds[idx-1]}${unit} – ${thresholds[idx]}${unit})` : 
                            thresholds && idx === 0 ? `(< ${thresholds[0]}${unit})` : 
-                           thresholds && idx === clusterResult.bestK - 1 ? `(> ${thresholds[idx-1]}${unit})` : ''}
+                           thresholds && idx === (clusterResult?.bestK || 0) - 1 ? `(> ${thresholds[idx-1]}${unit})` : ''}
                         </span>
                       </span>
                     </div>
@@ -374,8 +439,8 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* K-Medoids Medoid Info */}
-            {clusterResult?.clusterMeta && (
+            {/* K-Medoids Medoid Info (hidden in trend mode) */}
+            {clusterResult?.clusterMeta && viewMode !== 'trend' && (
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mt-4">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                   <Info className="w-3 h-3" />
@@ -392,7 +457,7 @@ export default function MapPage() {
                         {(() => {
                           const val = meta.medoid;
                           if (Array.isArray(val)) {
-                            return (val.reduce((a, b) => a + b, 0) / val.length).toFixed(1);
+                            return (val.reduce((a, b: number) => a + b, 0) / val.length).toFixed(1);
                           }
                           return typeof val === 'number' ? val.toFixed(1) : '0.0';
                         })()}
@@ -400,6 +465,83 @@ export default function MapPage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Trend Summary - Interactive Filters (only for trend mode) */}
+            {viewMode === 'trend' && (
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300 mt-2">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-orange-600" />
+                  {t.map.trendSummary} ({year})
+                </h3>
+                <div className="space-y-1">
+                  <label className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={trendFilters.naik}
+                        onChange={() => setTrendFilters(f => ({ ...f, naik: !f.naik }))}
+                        className="w-4 h-4 border-gray-300 rounded text-red-600 focus:ring-red-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm" />
+                        <span className="text-xs text-gray-600 font-medium group-hover:text-gray-900">{t.map.trendRising}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-red-600 bg-red-50/50 px-2 py-0.5 rounded-md">{trendStats.naik}</span>
+                  </label>
+
+                  <label className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={trendFilters.turun}
+                        onChange={() => setTrendFilters(f => ({ ...f, turun: !f.turun }))}
+                        className="w-4 h-4 border-gray-300 rounded text-green-600 focus:ring-green-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm" />
+                        <span className="text-xs text-gray-600 font-medium group-hover:text-gray-900">{t.map.trendFalling}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-green-600 bg-green-50/50 px-2 py-0.5 rounded-md">{trendStats.turun}</span>
+                  </label>
+
+                  <label className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={trendFilters.tetap}
+                        onChange={() => setTrendFilters(f => ({ ...f, tetap: !f.tetap }))}
+                        className="w-4 h-4 border-gray-300 rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+                        <span className="text-xs text-gray-600 font-medium group-hover:text-gray-900">{t.map.trendSteady}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded-md">{trendStats.tetap}</span>
+                  </label>
+
+                  {trendStats.noData > 0 && (
+                    <label className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group border-t border-gray-100/50 pt-3 mt-1">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={trendFilters.noData}
+                          onChange={() => setTrendFilters(f => ({ ...f, noData: !f.noData }))}
+                          className="w-3.5 h-3.5 border-gray-300 rounded text-gray-400 focus:ring-gray-300"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                          <span className="text-[10px] text-gray-400 font-medium italic group-hover:text-gray-600">{t.map.trendNoData}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-400">{trendStats.noData}</span>
+                    </label>
+                  )}
                 </div>
               </div>
             )}
@@ -416,21 +558,43 @@ export default function MapPage() {
            viewMode === 'prevention_risk' ? t.mapLegend.preventionRisk : 
            viewMode === 'maternal_risk' ? t.mapLegend.maternalRisk : 
            viewMode === 'environment_risk' ? t.mapLegend.environmentRisk :
+           viewMode === 'trend' ? t.mapLegend.annualTrend :
            t.mapLegend.comprehensiveRisk}
         </h4>
         <div className="flex items-center gap-4 flex-wrap max-w-sm">
-          {clusterResult?.clusterMeta.map((meta, idx) => (
-            <div key={meta.id} className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-md" style={{ backgroundColor: meta.color }} />
-              <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">
-                {meta.label} {thresholds && thresholds[idx-1] !== undefined && thresholds[idx] !== undefined ? `(${thresholds[idx-1]}${unit}–${thresholds[idx]}${unit})` : 
-                           thresholds && idx === 0 ? `(<${thresholds[0]}${unit})` : 
-                           thresholds && idx === clusterResult.bestK - 1 ? `(>${thresholds[idx-1]}${unit})` : ''}
-              </span>
-            </div>
-          ))}
+          {viewMode === 'trend' ? (
+            <>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-red-500" />
+                <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">{t.mapLegend.trendRising}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-green-500" />
+                <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">{t.mapLegend.trendFalling}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-blue-500" />
+                <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">{t.mapLegend.trendSteady}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-gray-400" />
+                <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">{t.mapLegend.trendNoComparison}</span>
+              </div>
+            </>
+          ) : (
+            clusterResult?.clusterMeta.map((meta, idx) => (
+              <div key={meta.id} className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md" style={{ backgroundColor: meta.color }} />
+                <span className="text-[10px] font-medium text-gray-600 whitespace-nowrap">
+                  {meta.label} {thresholds && thresholds[idx-1] !== undefined && thresholds[idx] !== undefined ? `(${thresholds[idx-1]}${unit}–${thresholds[idx]}${unit})` : 
+                             thresholds && idx === 0 ? `(<${thresholds[0]}${unit})` : 
+                             thresholds && idx === (clusterResult?.bestK || 0) - 1 ? `(>${thresholds[idx-1]}${unit})` : ''}
+                </span>
+              </div>
+            ))
+          )}
         </div>
-        {clusterResult && (
+        {clusterResult && viewMode !== 'trend' && (
           <p className="text-[10px] text-blue-500 font-semibold tracking-wide text-center mt-0.5">
             ✦ {t.map.silhouetteOptimization} (K={clusterResult.bestK})
           </p>
@@ -472,9 +636,10 @@ export default function MapPage() {
                     <div className={`px-3 py-1 rounded-full text-xs font-bold ${
                       (selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? 'bg-red-100 text-red-700' :
                       (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? 'bg-green-100 text-green-700' :
+                      (selectedRegion.trend === 'tetap' || selectedRegion.trend === 'steady') ? 'bg-blue-100 text-blue-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                      {t.map.trend} {(selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? '↑' : (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? '↓' : '—'}
+                      {t.map.trend} {(selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? '↑' : (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? '↓' : (selectedRegion.trend === 'tetap' || selectedRegion.trend === 'steady') ? '—' : '?'}
                     </div>
                   </div>
 

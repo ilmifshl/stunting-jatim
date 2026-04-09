@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
 
 const supabaseUrl = 'https://uqxoloduboqmiymadomk.supabase.co';
 const supabaseKey = 'sb_publishable_-En9cIb4wLp7HygfmxrRNw_Cnsx8Hit';
@@ -6,40 +7,19 @@ const supabaseKey = 'sb_publishable_-En9cIb4wLp7HygfmxrRNw_Cnsx8Hit';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function testQuery() {
-  const year = 2023;
-  console.log('Testing query for year:', year);
-  
-  // Try without the .eq filter first to see if regions exist
-  const { data: allRegions, error: err1 } = await supabase
-    .from('regions')
-    .select('name')
-    .limit(5);
-  
-  console.log('Sample regions:', allRegions?.map(r => r.name));
+  const { data: currData } = await supabase.from('stunting_data').select('prevalence, regions:regions(name)').eq('year', 2024);
+  const { data: prevData } = await supabase.from('stunting_data').select('prevalence, regions:regions(name)').eq('year', 2023);
 
-  // Now the failing query
-  const { data, error } = await supabase
-    .from('regions')
-    .select(`
-      name,
-      stunting_data (
-        prevalence,
-        year
-      )
-    `)
-    .eq('stunting_data.year', year);
+  const result = {
+    bojonegoro_2024: currData?.find(d => d.regions?.name === 'Kabupaten Bojonegoro' || d.regions?.name === 'Bojonegoro'),
+    bojonegoro_2023: prevData?.find(d => d.regions?.name === 'Kabupaten Bojonegoro' || d.regions?.name === 'Bojonegoro'),
+    blitar_kab_2024: currData?.find(d => d.regions?.name === 'Kabupaten Blitar'),
+    blitar_kab_2023: prevData?.find(d => d.regions?.name === 'Kabupaten Blitar'),
+    blitar_kota_2024: currData?.find(d => d.regions?.name === 'Kota Blitar'),
+    blitar_kota_2023: prevData?.find(d => d.regions?.name === 'Kota Blitar'),
+  };
 
-  if (error) {
-    console.error('Error:', error);
-    return;
-  }
-
-  console.log('Data count with year filter:', data?.length);
-  if (data && data.length > 0) {
-    const withData = data.filter(r => r.stunting_data && r.stunting_data.length > 0);
-    console.log('Regions with stunting data:', withData.length);
-    console.log('Sample region with data:', JSON.stringify(data.find(r => r.stunting_data.length > 0), null, 2));
-  }
+  fs.writeFileSync('tmp/test-output.json', JSON.stringify(result, null, 2));
 }
 
 testQuery();

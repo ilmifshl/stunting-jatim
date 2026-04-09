@@ -1,0 +1,38 @@
+{
+  "bojonegoro_2024": {
+    "prevalence": 2.3,
+    "regions": {
+      "name": "Kabupaten Bojonegoro"
+    }
+  },
+  "bojonegoro_2023": {
+    "prevalence": 2.3,
+    "regions": {
+      "name": "Kabupaten Bojonegoro"
+    }
+  },
+  "blitar_kab_2024": {
+    "prevalence": 7.8,
+    "regions": {
+      "name": "Kabupaten Blitar"
+    }
+  },
+  "blitar_kab_2023": {
+    "prevalence": 7.8,
+    "regions": {
+      "name": "Kabupaten Blitar"
+    }
+  },
+  "blitar_kota_2024": {
+    "prevalence": 5.3,
+    "regions": {
+      "name": "Kota Blitar"
+    }
+  },
+  "blitar_kota_2023": {
+    "prevalence": 5.7,
+    "regions": {
+      "name": "Kota Blitar"
+    }
+  }
+}
