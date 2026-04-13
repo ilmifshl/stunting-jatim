@@ -218,8 +218,8 @@ export function classifyScoreClusters(data: RegionScoreData[]): ClusterResult {
   // Normalize everything to number[][] internally
   const points = validData.map((d) => Array.isArray(d.score) ? d.score : [d.score]);
   
-  // Evaluation: Try K from 2 to 7
-  const kRange = [2, 3, 4, 5, 6, 7].filter(k => k <= validData.length);
+  // Evaluation: Try K from 3 to 7
+  const kRange = [3, 4, 5, 6, 7].filter(k => k <= validData.length);
   const allKResultsDetailed = kRange.map(k => {
     const { medoidIndices, assignments } = kMedoidsPAM(points, k);
     const sil = calculateSilhouettes(points, assignments, k);
