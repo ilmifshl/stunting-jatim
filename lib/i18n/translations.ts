@@ -109,7 +109,7 @@ export const translations = {
       trendNoData: 'Tanpa Data',
     },
     mapLegend: {
-      prevalence: 'Keterangan Prevalensi',
+      prevalence: 'Prevalensi',
       annualTrend: 'Keterangan Tren Tahunan',
       directRisk: 'Skor Risiko Langsung',
       preventionRisk: 'Skor Risiko Pencegahan',
@@ -297,8 +297,8 @@ export const translations = {
       trendNoData: 'No Data',
     },
     mapLegend: {
-      prevalence: 'Prevalence Legend',
-      annualTrend: 'Annual Trend Legend',
+      prevalence: 'Prevalence',
+      annualTrend: 'Annual Trend',
       directRisk: 'Direct Risk Score',
       preventionRisk: 'Prevention Risk Score',
       maternalRisk: 'Maternal & Infant Risk Score',
