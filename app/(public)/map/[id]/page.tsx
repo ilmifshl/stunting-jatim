@@ -63,6 +63,7 @@ export default function RegionDetailPage() {
   const [stuntingHistory, setStuntingHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [aiStory, setAiStory] = useState<string | null>(null);
+  const [aiUsedModel, setAiUsedModel] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [sectorStories, setSectorStories] = useState<{ [key: string]: string }>({});
   const [isSectorLoading, setIsSectorLoading] = useState<{ [key: string]: boolean }>({});
@@ -136,6 +137,7 @@ export default function RegionDetailPage() {
       const data = await response.json();
       if (data.story) {
         setAiStory(data.story);
+        setAiUsedModel(data.usedModel);
       } else {
         throw new Error(data.error || (lang === 'id' ? 'Gagal mengambil cerita' : 'Failed to get story'));
       }
@@ -402,7 +404,9 @@ export default function RegionDetailPage() {
                         "{renderFormattedText(aiStory)}"
                       </p>
                       <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <p className="text-[9px] font-bold text-slate-400 tracking-widest">{t.mapDetail.modelInfo}</p>
+                        <p className="text-[9px] font-bold text-slate-400 tracking-widest">
+                          {t.mapDetail.modelInfo} {aiUsedModel || 'Gemini'} • {lang === 'id' ? 'Bahasa Indonesia' : 'English'}
+                        </p>
                         <button
                           onClick={handleGenerateAiStory}
                           className="text-[9px] font-black text-blue-600 tracking-widest hover:underline decoration-2 underline-offset-4 transition-all"
