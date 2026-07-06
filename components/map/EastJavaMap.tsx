@@ -201,7 +201,7 @@ export default function EastJavaMap({
 
     if (viewMode === 'trend') {
       const trend = trendData?.[feature.properties.name];
-      const fill = trend === 'naik' ? '#ef4444' : trend === 'turun' ? '#22c55e' : trend === 'tetap' ? '#3b82f6' : '#94a3b8';
+      const fill = trend === 'naik' ? '#ef4444' : trend === 'turun' ? '#22c55e' : trend === 'tetap' ? '#eab308' : '#94a3b8';
       return {
         fillColor: fill,
         weight: isSelected ? 3 : 1,
@@ -238,7 +238,7 @@ export default function EastJavaMap({
     if (viewMode === 'trend') {
       const trend = trendData?.[feature.properties.name];
       const trendText = trend === 'naik' ? '↑ ' + t.mapLegend.trendRising : trend === 'turun' ? '↓ ' + t.mapLegend.trendFalling : trend === 'tetap' ? '— ' + t.mapLegend.trendSteady : t.mapLegend.trendNoComparison;
-      const trendColor = trend === 'naik' ? 'text-red-600' : trend === 'turun' ? 'text-green-600' : trend === 'tetap' ? 'text-blue-600' : 'text-gray-500';
+      const trendColor = trend === 'naik' ? 'text-red-600' : trend === 'turun' ? 'text-green-600' : trend === 'tetap' ? 'text-yellow-600' : 'text-gray-500';
       const mainText = `${t.map.trend}: <b class="${trendColor}">${trendText}</b>`;
 
       return `

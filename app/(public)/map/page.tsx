@@ -693,14 +693,14 @@ export default function MapPage() {
                         type="checkbox"
                         checked={trendFilters.tetap}
                         onChange={() => setTrendFilters(f => ({ ...f, tetap: !f.tetap }))}
-                        className="w-4 h-4 border-gray-300 rounded text-blue-600 focus:ring-blue-500"
+                        className="w-4 h-4 border-gray-300 rounded text-yellow-600 focus:ring-yellow-500"
                       />
                       <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 shadow-sm" />
                         <span className="text-xs text-gray-600 font-medium group-hover:text-gray-900">{t.map.trendSteady}</span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded-md">{trendStats.tetap}</span>
+                    <span className="text-xs font-bold text-yellow-600 bg-yellow-50/50 px-2 py-0.5 rounded-md">{trendStats.tetap}</span>
                   </label>
 
                   {trendStats.noData > 0 && (
@@ -832,7 +832,7 @@ export default function MapPage() {
                 <div className="space-y-1">
                   {[{ key: 'naik', label: t.map.trendRising, color: 'bg-red-500', count: trendStats.naik },
                     { key: 'turun', label: t.map.trendFalling, color: 'bg-green-500', count: trendStats.turun },
-                    { key: 'tetap', label: t.map.trendSteady, color: 'bg-blue-500', count: trendStats.tetap }].map(tr => (
+                    { key: 'tetap', label: t.map.trendSteady, color: 'bg-yellow-500', count: trendStats.tetap }].map(tr => (
                     <label key={tr.key} className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group">
                       <div className="flex items-center gap-3">
                         <input type="checkbox" checked={(trendFilters as any)[tr.key]}
@@ -943,7 +943,7 @@ export default function MapPage() {
                     <div className={`px-3 py-1 rounded-full text-xs font-bold ${
                       (selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? 'bg-red-100 text-red-700' :
                       (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? 'bg-green-100 text-green-700' :
-                      (selectedRegion.trend === 'tetap' || selectedRegion.trend === 'steady') ? 'bg-blue-100 text-blue-700' :
+                      (selectedRegion.trend === 'tetap' || selectedRegion.trend === 'steady') ? 'bg-yellow-100 text-yellow-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
                       {t.map.trend} {(selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? '↑' : (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? '↓' : (selectedRegion.trend === 'tetap' || selectedRegion.trend === 'steady') ? '—' : '?'}
