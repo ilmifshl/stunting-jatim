@@ -2,24 +2,28 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Map as MapIcon, BookOpen, AlertCircle, Globe } from 'lucide-react';
+import { Activity, Map as MapIcon, BookOpen, AlertCircle, Globe, FileText, Menu, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { useState } from 'react';
 
 export default function Navbar() {
   const pathname = usePathname();
   const { lang, t, toggleLanguage } = useLanguage();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
     { name: t.navbar.home, path: '/', icon: Activity },
     { name: t.navbar.interactiveMap, path: '/map', icon: MapIcon },
     { name: t.navbar.riskFactors, path: '/factors', icon: AlertCircle },
+    { name: t.navbar.rekapKlaster, path: '/rekap-klaster', icon: FileText },
     { name: t.navbar.articles, path: '/articles', icon: BookOpen },
   ];
 
   return (
-    <nav className="sticky top-0 w-full h-16 bg-white border-b border-gray-100 z-[9999] shadow-sm">
+    <nav className="sticky top-0 w-full bg-white border-b border-gray-100 z-[9999] shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
+          {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -29,6 +33,7 @@ export default function Navbar() {
             </Link>
           </div>
 
+          {/* Desktop Nav */}
           <div className="hidden md:flex items-center space-x-4">
             <div className="flex items-center space-x-1">
               {navItems.map((item) => {
@@ -64,10 +69,56 @@ export default function Navbar() {
               <Globe className="w-4 h-4" />
               <span className="uppercase">{lang}</span>
             </button>
+          </div>
 
+          {/* Mobile: Language + Hamburger */}
+          <div className="flex md:hidden items-center gap-2">
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-all border border-gray-200"
+              title={lang === 'id' ? 'Switch to English' : 'Ubah ke Bahasa Indonesia'}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="uppercase text-xs">{lang}</span>
+            </button>
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Mobile Dropdown Menu */}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-gray-100 bg-white shadow-lg">
+          <div className="px-4 py-3 space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  onClick={() => setMobileOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
+                    ${isActive
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                  `}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

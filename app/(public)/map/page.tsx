@@ -1,8 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
-import { Search, ChevronLeft, ChevronRight, Info, MapPin, BarChart2 } from 'lucide-react';
+import { Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Search, ChevronLeft, ChevronRight, Info, MapPin, BarChart2, X } from 'lucide-react';
 import Link from 'next/link';
 import type { EastJavaMapProps } from '@/components/map/EastJavaMap';
 
@@ -29,6 +29,11 @@ export default function MapPage() {
   
   // Dynamic filters: clusterId -> boolean
   const [clusterFilters, setClusterFilters] = useState<Record<string, boolean>>({});
+
+  // Mode tooltip state
+  const [tooltipMode, setTooltipMode] = useState<string | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hoveredButtonRect, setHoveredButtonRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   
   const [selectedRegion, setSelectedRegion] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -50,6 +55,16 @@ export default function MapPage() {
   const [clusterResult, setClusterResult] = useState<ClusterResult | null>(null);
   const [isClusterLoading, setIsClusterLoading] = useState(false);
   const clusterCacheRef = useRef<Map<string, ClusterResult>>(new Map());
+
+  // Count kabupaten/kota in each cluster
+  const clusterCounts = useMemo(() => {
+    if (!clusterResult?.clusters) return {};
+    const counts: Record<string, number> = {};
+    Object.values(clusterResult.clusters).forEach((clusterId) => {
+      counts[clusterId] = (counts[clusterId] || 0) + 1;
+    });
+    return counts;
+  }, [clusterResult]);
 
   const translateClusterLabel = useCallback((label: string) => {
     const map: Record<string, string> = {
@@ -277,7 +292,7 @@ export default function MapPage() {
   const unit = viewMode === 'prevalence' ? '%' : '';
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden" id="map-page-root">
       {/* Full Background Map */}
       <Suspense fallback={<div>Loading...</div>}>
         <EastJavaMap
@@ -296,37 +311,177 @@ export default function MapPage() {
       </Suspense>
 
       {/* Floating View Mode Switcher (Top Center) */}
-      <div 
-        className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border border-gray-100 transition-all duration-300"
-      >
-        <div className="flex gap-1">
-          {[
-            { id: 'prevalence', label: t.mapLegend.prevalence, color: 'text-blue-600', activeBg: 'bg-blue-50' },
-            { id: 'direct_risk', label: t.factors.directRisk, color: 'text-orange-600', activeBg: 'bg-orange-50' },
-            { id: 'prevention_risk', label: t.factors.effectivePrevention, color: 'text-emerald-600', activeBg: 'bg-emerald-50' },
-            { id: 'maternal_risk', label: t.factors.maternalHealth, color: 'text-purple-600', activeBg: 'bg-purple-50' },
-            { id: 'environment_risk', label: t.factors.environment, color: 'text-cyan-600', activeBg: 'bg-cyan-50' },
-            { id: 'comprehensive_risk', label: lang === 'id' ? 'Komprehensif' : 'Comprehensive', color: 'text-indigo-600', activeBg: 'bg-indigo-50' },
-            { id: 'trend', label: t.map.annualTrend, color: 'text-amber-600', activeBg: 'bg-amber-50' },
-          ].map((modeItem) => (
-            <button
-              key={modeItem.id}
-              onClick={() => setViewMode(modeItem.id as any)}
-              className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all duration-200 whitespace-nowrap ${
-                viewMode === modeItem.id 
-                  ? `${modeItem.activeBg} ${modeItem.color} shadow-sm ring-1 ring-inset ring-gray-100` 
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
-              }`}
-            >
-              {modeItem.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {(() => {
+        const modeTooltips: Record<string, { desc: string; factors: string[] }> = {
+          prevalence: {
+            desc: lang === 'id'
+              ? 'Peta kluster berdasarkan tingkat prevalensi stunting (%) tiap wilayah.'
+              : 'Cluster map based on stunting prevalence rate (%) per region.',
+            factors: lang === 'id'
+              ? ['Prevalensi Stunting (%)']
+              : ['Stunting Prevalence (%)'],
+          },
+          direct_risk: {
+            desc: lang === 'id'
+              ? 'Kluster berdasarkan faktor biologis anak yang berkaitan langsung dengan stunting.'
+              : 'Cluster based on direct child biological risk factors related to stunting.',
+            factors: lang === 'id'
+              ? ['BBLR / Berat Badan Lahir Rendah (%)', 'IMD / Inisiasi Menyusu Dini (%)', 'ASI Eksklusif (< 6 bulan) (%)']
+              : ['LBW / Low Birth Weight (%)', 'EIB / Early Initiation of Breastfeeding (%)', 'Exclusive Breastfeeding (< 6 mo) (%)'],
+          },
+          prevention_risk: {
+            desc: lang === 'id'
+              ? 'Kluster berdasarkan cakupan layanan kesehatan preventif untuk bayi dan balita.'
+              : 'Cluster based on preventive healthcare coverage for infants and toddlers.',
+            factors: lang === 'id'
+              ? ['Imunisasi Dasar Lengkap / IDL (%)', 'Suplementasi Vitamin A (%)']
+              : ['Complete Basic Immunization (%)', 'Vitamin A Supplementation (%)'],
+          },
+          maternal_risk: {
+            desc: lang === 'id'
+              ? 'Kluster berdasarkan intervensi kesehatan pada ibu hamil dan calon pengantin.'
+              : 'Cluster based on health interventions for pregnant mothers and prospective brides.',
+            factors: lang === 'id'
+              ? ['Tablet Tambah Darah 90 Tablet / TTD (%)', 'Layanan Kesehatan Calon Pengantin (%)']
+              : ['Blood-Adding Tablets 90 Tabs (%)', 'Prospective Brides Health Services (%)'],
+          },
+          environment_risk: {
+            desc: lang === 'id'
+              ? 'Kluster berdasarkan akses infrastruktur sanitasi dan kesehatan lingkungan.'
+              : 'Cluster based on sanitation infrastructure access and environmental health.',
+            factors: lang === 'id'
+              ? ['Akses Jamban Sehat (% KK)', 'KK Stop BABS / STBM (% KK)']
+              : ['Healthy Latrine Access (% HH)', 'Open Defecation Free Households (% HH)'],
+          },
+          comprehensive_risk: {
+            desc: lang === 'id'
+              ? 'Kluster komprehensif menggabungkan seluruh faktor risiko dari keempat dimensi sekaligus.'
+              : 'Comprehensive cluster combining all risk factors from all four dimensions at once.',
+            factors: lang === 'id'
+              ? ['Risiko Langsung (BBLR, IMD, ASI)', 'Pencegahan Efektif (IDL, Vit A)', 'Kesehatan Ibu (TTD, Catin)', 'Lingkungan (Jamban, STBM)']
+              : ['Direct Risk (LBW, EIB, Breastfeeding)', 'Prevention (Immunization, Vit A)', 'Maternal Health (BAT, Brides)', 'Environment (Latrine, ODF)'],
+          },
+          trend: {
+            desc: lang === 'id'
+              ? 'Peta tren tahunan — apakah prevalensi wilayah naik, turun, atau stagnan dibanding tahun sebelumnya.'
+              : 'Annual trend map — whether a region\'s prevalence rose, fell, or stayed the same vs. the prior year.',
+            factors: lang === 'id'
+              ? ['Selisih Prevalensi vs. Tahun Sebelumnya']
+              : ['Prevalence Delta vs. Previous Year'],
+          },
+        };
 
-      {/* Floating Left Panel (Filter) */}
+        const modes = [
+          { id: 'prevalence',        label: t.mapLegend.prevalence,                              color: 'text-blue-600',   activeBg: 'bg-blue-50',   dotColor: '#2563eb' },
+          { id: 'direct_risk',       label: t.factors.directRisk,                                color: 'text-orange-600', activeBg: 'bg-orange-50', dotColor: '#ea580c' },
+          { id: 'prevention_risk',   label: t.factors.effectivePrevention,                       color: 'text-emerald-600',activeBg: 'bg-emerald-50',dotColor: '#059669' },
+          { id: 'maternal_risk',     label: t.factors.maternalHealth,                            color: 'text-purple-600', activeBg: 'bg-purple-50', dotColor: '#7c3aed' },
+          { id: 'environment_risk',  label: t.factors.environment,                               color: 'text-cyan-600',   activeBg: 'bg-cyan-50',   dotColor: '#0891b2' },
+          { id: 'comprehensive_risk',label: lang === 'id' ? 'Komprehensif' : 'Comprehensive',    color: 'text-indigo-600', activeBg: 'bg-indigo-50', dotColor: '#4338ca' },
+          { id: 'trend',             label: t.map.annualTrend,                                   color: 'text-amber-600',  activeBg: 'bg-amber-50',  dotColor: '#d97706' },
+        ];
+
+        const activeModeItem = modes.find(m => m.id === tooltipMode);
+        const tip = activeModeItem ? modeTooltips[activeModeItem.id] : null;
+
+        return (
+          <>
+            <div
+              className="absolute top-3 md:top-6 left-1/2 -translate-x-1/2 z-[1000] bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border border-gray-100 transition-all duration-300 max-w-[calc(100vw-2rem)] overflow-x-auto"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              <div className="flex gap-1 min-w-max">
+                {modes.map((modeItem) => {
+                  return (
+                    <button
+                      key={modeItem.id}
+                      onClick={() => setViewMode(modeItem.id as any)}
+                      onMouseEnter={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+                        tooltipTimerRef.current = setTimeout(() => {
+                          setTooltipMode(modeItem.id);
+                          setHoveredButtonRect({
+                            top: rect.top,
+                            left: rect.left,
+                            width: rect.width,
+                            height: rect.height
+                          });
+                        }, 600);
+                      }}
+                      onMouseLeave={() => {
+                        if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+                        setTooltipMode(null);
+                        setHoveredButtonRect(null);
+                      }}
+                      className={`px-3 md:px-4 py-2 rounded-xl text-[11px] font-bold transition-all duration-200 whitespace-nowrap ${
+                        viewMode === modeItem.id
+                          ? `${modeItem.activeBg} ${modeItem.color} shadow-sm ring-1 ring-inset ring-gray-100`
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+                      }`}
+                    >
+                      {modeItem.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tooltip — appears BELOW the button, positioned using fixed coordinate portal */}
+            {tooltipMode && hoveredButtonRect && activeModeItem && tip && (
+              <div
+                className="fixed z-[2000] pointer-events-none"
+                style={{
+                  top: `${hoveredButtonRect.top + hoveredButtonRect.height}px`,
+                  left: `${hoveredButtonRect.left + hoveredButtonRect.width / 2}px`,
+                  transform: 'translate(-50%, 0) translateY(10px)',
+                }}
+              >
+                <div
+                  className="w-72 bg-white border border-gray-100 rounded-2xl shadow-xl p-4 relative"
+                  style={{ animation: 'tooltipFadeUp 0.18s ease-out' }}
+                >
+                  {/* Arrow pointing upward */}
+                  <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-l border-t border-gray-100 rotate-45 rounded-sm" />
+
+                  {/* Mode label */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: activeModeItem.dotColor }}
+                    />
+                    <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: activeModeItem.dotColor }}>
+                      {activeModeItem.label}
+                    </span>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-[12px] text-gray-500 leading-relaxed mb-3">
+                    {tip.desc}
+                  </p>
+
+                  {/* Factors list */}
+                  <div className="border-t border-gray-100 pt-2.5 space-y-1.5">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      {lang === 'id' ? 'Indikator yang ditinjau' : 'Indicators reviewed'}
+                    </span>
+                    {tip.factors.map((f, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: activeModeItem.dotColor }} />
+                        <span className="text-[12px] text-gray-700 leading-snug">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Floating Left Panel (Filter) — Desktop */}
       <div
-        className={`absolute left-4 top-4 bottom-4 z-[1000] w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 flex flex-col transition-all duration-300 ${isFilterOpen ? 'translate-x-0' : '-translate-x-[calc(100%+16px)]'
+        className={`hidden md:flex absolute left-4 top-4 bottom-4 z-[1000] w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 flex-col transition-all duration-300 ${isFilterOpen ? 'translate-x-0' : '-translate-x-[calc(100%+16px)]'
           }`}
       >
         {/* Toggle Button */}
@@ -469,6 +624,29 @@ export default function MapPage() {
               </div>
             )}
 
+            {/* K-Medoids Cluster Member Counts (hidden in trend mode) */}
+            {clusterResult?.clusterMeta && viewMode !== 'trend' && (
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mt-3">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <BarChart2 className="w-3 h-3" />
+                  {lang === 'id' ? 'Distribusi Wilayah' : 'Region Distribution'} ({year})
+                </p>
+                <div className="space-y-1">
+                  {clusterResult.clusterMeta.map((meta) => (
+                    <div key={meta.id} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.color }} />
+                        <span className="text-gray-600">{meta.label}</span>
+                      </div>
+                      <span className="font-bold text-gray-800">
+                        {clusterCounts[meta.id] || 0} <span className="text-[10px] font-normal text-gray-400">{lang === 'id' ? 'Wilayah' : 'Regions'}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 4. Trend Summary - Interactive Filters (only for trend mode) */}
             {viewMode === 'trend' && (
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300 mt-2">
@@ -549,6 +727,132 @@ export default function MapPage() {
         </div>
       </div>
 
+      {/* Mobile Filter Bottom Sheet */}
+      <div className="md:hidden">
+        {/* Toggle Tab */}
+        <button
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+          className="absolute bottom-0 left-4 z-[1001] bg-white/95 backdrop-blur-md px-4 py-2 rounded-t-xl shadow-lg border border-b-0 border-gray-100 text-sm font-bold text-gray-700 flex items-center gap-2"
+        >
+          <BarChart2 className="w-4 h-4 text-blue-600" />
+          {t.map.filterData}
+          {isFilterOpen ? <ChevronLeft className="w-4 h-4 rotate-[-90deg]" /> : <ChevronRight className="w-4 h-4 rotate-90" />}
+        </button>
+        {/* Sheet */}
+        <div
+          className={`absolute left-0 right-0 bottom-0 z-[1000] bg-white/98 backdrop-blur-md rounded-t-2xl shadow-2xl border-t border-gray-100 flex flex-col transition-transform duration-300 ${
+            isFilterOpen ? 'translate-y-0' : 'translate-y-full'
+          }`}
+          style={{ maxHeight: '65vh' }}
+        >
+          <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-blue-600" />
+              {t.map.filterData}
+            </h2>
+            <button onClick={() => setIsFilterOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+              <ChevronLeft className="w-4 h-4 rotate-[-90deg]" />
+            </button>
+          </div>
+          <div className="overflow-y-auto px-5 pb-6 space-y-5 flex-1">
+            {/* Search */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{t.map.search}</label>
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder={t.map.searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900"
+                />
+              </div>
+            </div>
+            {/* Year Slider */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{t.map.year}: {year}</label>
+              <div className="px-2">
+                <input
+                  type="range"
+                  min={years[0]}
+                  max={years[years.length - 1]}
+                  step="1"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium">
+                  {years.map((y) => (
+                    <span key={y} className={y === year ? 'text-blue-600 font-bold' : ''}>{y}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Cluster checkboxes */}
+            <div className={`transition-all duration-300 ${viewMode === 'trend' ? 'opacity-0 h-0 overflow-hidden pointer-events-none' : 'opacity-100'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  {viewMode === 'prevalence' ? t.map.prevalenceLevel : t.map.riskLevel}
+                </label>
+                {(isClusterLoading || isDetailLoading) && (
+                  <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-50 rounded-full border border-blue-100 animate-pulse">
+                    <div className="w-2 h-2 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">{t.map.aligning}</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                {clusterResult?.clusterMeta.map((meta) => (
+                  <label key={meta.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={clusterFilters[meta.id] ?? true}
+                      onChange={() => setClusterFilters(f => ({ ...f, [meta.id]: !f[meta.id] }))}
+                      className="w-4 h-4 border-gray-300 rounded focus:ring-blue-500"
+                      style={{ color: meta.color }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: meta.color }} />
+                      <span className="text-sm text-gray-700 font-medium">{meta.label}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Trend filters */}
+            {viewMode === 'trend' && (
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-orange-600" />
+                  {t.map.trendSummary} ({year})
+                </h3>
+                <div className="space-y-1">
+                  {[{ key: 'naik', label: t.map.trendRising, color: 'bg-red-500', count: trendStats.naik },
+                    { key: 'turun', label: t.map.trendFalling, color: 'bg-green-500', count: trendStats.turun },
+                    { key: 'tetap', label: t.map.trendSteady, color: 'bg-blue-500', count: trendStats.tetap }].map(tr => (
+                    <label key={tr.key} className="flex justify-between items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={(trendFilters as any)[tr.key]}
+                          onChange={() => setTrendFilters(f => ({ ...f, [tr.key]: !(f as any)[tr.key] }))}
+                          className="w-4 h-4 border-gray-300 rounded" />
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${tr.color}`} />
+                          <span className="text-xs text-gray-600 font-medium">{tr.label}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-gray-500">{tr.count}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Floating Bottom Left Legend (dynamic) */}
       <div className={`absolute bottom-4 z-[999] bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100 flex flex-col gap-2 transition-all duration-300 ${isFilterOpen ? 'left-[352px]' : 'left-4'
         }`}>
@@ -603,7 +907,10 @@ export default function MapPage() {
 
       {/* Floating Right Panel (Brief Details) */}
       {selectedRegion && (
-        <div className="absolute right-4 top-4 bottom-4 z-[1000] w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+        <div className="
+          hidden md:flex
+          absolute right-4 top-4 bottom-4 z-[1000] w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 flex-col overflow-hidden
+        ">
           {isDetailLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center space-y-4 p-6">
               <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
@@ -705,6 +1012,74 @@ export default function MapPage() {
                 <Link
                   href={`/map/${encodeURIComponent(selectedRegion.name)}`}
                   className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-md transition-all duration-200"
+                >
+                  {t.map.viewFullDetail}
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Mobile Brief Details Bottom Sheet */}
+      {selectedRegion && (
+        <div className="md:hidden absolute left-0 right-0 bottom-0 z-[1002] bg-white/98 backdrop-blur-md rounded-t-2xl shadow-2xl border-t border-gray-100 flex flex-col overflow-hidden" style={{ maxHeight: '60vh' }}>
+          {isDetailLoading ? (
+            <div className="flex flex-col items-center justify-center space-y-3 p-6">
+              <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+              <p className="text-sm font-medium text-gray-400">{t.map.fetchingRegionData}</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
+                <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-blue-600 shrink-0" />
+                    {selectedRegion.name}
+                  </h2>
+                  <button
+                    onClick={() => setSelectedRegion(null)}
+                    className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-blue-600 uppercase">{t.map.prevalence} ({year})</span>
+                      <p className="text-2xl font-black text-blue-900 mt-0.5">
+                        {selectedRegion.prevalence > 0 ? `${selectedRegion.prevalence}%` : 'N/A'}
+                      </p>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      (selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? 'bg-red-100 text-red-700' :
+                      (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? 'bg-green-100 text-green-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {t.map.trend} {(selectedRegion.trend === 'naik' || selectedRegion.trend === 'up') ? '↑' : (selectedRegion.trend === 'turun' || selectedRegion.trend === 'down') ? '↓' : '—'}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-gray-50 rounded-xl text-center">
+                      <span className="text-xs text-gray-500">{t.map.casesCount}</span>
+                      <p className="text-lg font-bold text-gray-800">{typeof selectedRegion.cases === 'number' ? selectedRegion.cases.toLocaleString() : 'N/A'}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-xl text-center">
+                      <span className="text-xs text-gray-500">{t.map.status}</span>
+                      {(() => {
+                        const status = getStatusDisplay(selectedRegion.clusterMeta, selectedRegion.prevalence);
+                        return <p className="text-sm font-bold mt-1" style={{ color: status.textColor }}>{status.text}</p>;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 shrink-0">
+                <Link
+                  href={`/map/${encodeURIComponent(selectedRegion.name)}`}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all duration-200"
                 >
                   {t.map.viewFullDetail}
                   <ChevronRight className="w-4 h-4" />

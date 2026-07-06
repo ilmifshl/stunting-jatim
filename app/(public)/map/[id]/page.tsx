@@ -9,8 +9,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
+import type { ClusterMeta } from '@/lib/kmedoids';
 import AdminTrendChart from '@/components/admin/AdminTrendChart';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { Table } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const colorStyles: { [key: string]: any } = {
   blue: {
@@ -66,7 +69,25 @@ export default function RegionDetailPage() {
   const [aiUsedModel, setAiUsedModel] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [sectorStories, setSectorStories] = useState<{ [key: string]: string }>({});
+  const [sectorUsedModels, setSectorUsedModels] = useState<{ [key: string]: string }>({});
   const [isSectorLoading, setIsSectorLoading] = useState<{ [key: string]: boolean }>({});
+  const [selectedModel, setSelectedModel] = useState<string>('auto');
+  const [clusterInfo, setClusterInfo] = useState<ClusterMeta | null>(null);
+  const [isClusterLoading, setIsClusterLoading] = useState(false);
+  const [activeTrendTab, setActiveTrendTab] = useState<'prevalence' | 'direct_risk' | 'prevention_risk' | 'maternal_risk' | 'environment_risk'>('prevalence');
+  const [isTableMinimized, setIsTableMinimized] = useState(false);
+  const [yoyStory, setYoyStory] = useState<string | null>(null);
+  const [yoyUsedModel, setYoyUsedModel] = useState<string | null>(null);
+  const [isYoyLoading, setIsYoyLoading] = useState(false);
+
+  const AI_MODELS = [
+    { value: 'auto',                          label: '🔄 Auto (Fallback)',           group: 'Auto' },
+    { value: 'groq/llama-3.3-70b-versatile',  label: '🦙 Llama 3.3 70B',            group: 'Groq' },
+    { value: 'groq/llama-3.1-8b-instant',     label: '⚡ Llama 3.1 8B Instant',     group: 'Groq' },
+    { value: 'gemini/gemini-2.5-flash',        label: '✨ Gemini 2.5 Flash',          group: 'Gemini' },
+    { value: 'gemini/gemini-2.5-flash-lite',   label: '💡 Gemini 2.5 Flash Lite',    group: 'Gemini' },
+    { value: 'gemini/gemini-1.5-flash',        label: '🌟 Gemini 1.5 Flash',         group: 'Gemini' },
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -125,6 +146,30 @@ export default function RegionDetailPage() {
     fetchData();
   }, [regionName]);
 
+  // Fetch cluster info for this region whenever activeYear changes (prevalence mode)
+  useEffect(() => {
+    const fetchClusterInfo = async () => {
+      setIsClusterLoading(true);
+      setClusterInfo(null);
+      try {
+        const res = await fetch(`/api/clustering?year=${activeYear}&mode=prevalence`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const clusterId = data.clusters?.[regionName] ?? null;
+        if (clusterId !== null) {
+          const meta = data.clusterMeta?.find((m: ClusterMeta) => m.id === clusterId) ?? null;
+          setClusterInfo(meta);
+        }
+      } catch (err) {
+        console.error('Error fetching cluster info:', err);
+      } finally {
+        setIsClusterLoading(false);
+      }
+    };
+
+    fetchClusterInfo();
+  }, [activeYear, regionName]);
+
   const handleGenerateAiStory = async () => {
     setIsAiLoading(true);
     setAiStory(null);
@@ -132,7 +177,12 @@ export default function RegionDetailPage() {
       const response = await fetch('/api/ai/storytelling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regionName, year: activeYear, language: lang }),
+        body: JSON.stringify({
+          regionName,
+          year: activeYear,
+          language: lang,
+          selectedModel: selectedModel === 'auto' ? undefined : selectedModel,
+        }),
       });
       const data = await response.json();
       if (data.story) {
@@ -162,20 +212,56 @@ export default function RegionDetailPage() {
           year: activeYear,
           category,
           categoryData,
-          language: lang
+          language: lang,
+          selectedModel: selectedModel === 'auto' ? undefined : selectedModel,
         }),
       });
       const data = await response.json();
       if (data.story) {
         setSectorStories(prev => ({ ...prev, [category]: data.story }));
+        setSectorUsedModels(prev => ({ ...prev, [category]: data.usedModel || '' }));
       } else {
         throw new Error(data.error || (lang === 'id' ? 'Gagal mengambil cerita' : 'Failed to get story'));
       }
     } catch (err) {
       console.error('Sector AI Error:', err);
       setSectorStories(prev => ({ ...prev, [category]: lang === 'id' ? 'Gagal memuat analisis sektoral.' : 'Failed to load sectoral analysis.' }));
+      setSectorUsedModels(prev => ({ ...prev, [category]: '' }));
     } finally {
       setIsSectorLoading(prev => ({ ...prev, [category]: false }));
+    }
+  };
+
+  const handleGenerateYoyStory = async () => {
+    setIsYoyLoading(true);
+    setYoyStory(null);
+    try {
+      const response = await fetch('/api/ai/storytelling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regionName,
+          year: activeYear,
+          category: 'yoy_trend',
+          categoryData: yoyData,
+          language: lang,
+          selectedModel: selectedModel === 'auto' ? undefined : selectedModel,
+        }),
+      });
+      const data = await response.json();
+      if (data.story) {
+        setYoyStory(data.story);
+        setYoyUsedModel(data.usedModel);
+      } else {
+        throw new Error(data.error || (lang === 'id' ? 'Gagal mengambil analisis tren' : 'Failed to get trend analysis'));
+      }
+    } catch (err) {
+      console.error('YoY AI Error:', err);
+      setYoyStory(lang === 'id'
+        ? 'Gagal memuat analisis tren AI. Pastikan API Key Anda sudah terkonfigurasi dengan benar.'
+        : 'Failed to load AI trend analysis. Please ensure your API Key is configured correctly.');
+    } finally {
+      setIsYoyLoading(false);
     }
   };
 
@@ -233,6 +319,42 @@ export default function RegionDetailPage() {
     ? parseFloat((currentStunting.prevalence - prevStunting.prevalence).toFixed(2))
     : null;
 
+  // Prepare YoY (Year-over-Year) merged data
+  const yoyData = [...availableYears]
+    .sort((a, b) => a - b)
+    .map(y => {
+      const sData = regionData.stunting_data?.find((s: any) => s.year === y);
+      const fData = regionData.stunting_factors?.find((f: any) => f.year === y);
+      return {
+        year: y.toString(),
+        // Prevalence
+        prevalence: sData?.prevalence ?? 0,
+        cases: sData?.stunting_cases ?? 0,
+        // Direct Risk
+        bblr_rate: fData?.bblr_rate ?? 0,
+        bblr_count: fData?.bblr_count ?? 0,
+        imd_rate: fData?.imd_rate ?? 0,
+        imd_count: fData?.imd_count ?? 0,
+        asi_rate: fData?.asi_rate ?? 0,
+        asi_count: fData?.asi_count ?? 0,
+        // Prevention
+        idl_rate: fData?.idl_rate ?? 0,
+        idl_count: fData?.idl_count ?? 0,
+        vita_rate: fData?.vita_rate ?? 0,
+        vita_count: fData?.vita_count ?? 0,
+        // Maternal
+        ttd_rate: fData?.ttd_rate ?? 0,
+        ttd_count: fData?.ttd_count ?? 0,
+        catin_rate: fData?.catin_rate ?? 0,
+        catin_count: fData?.catin_count ?? 0,
+        // Environment
+        jamban_rate: fData?.jamban_rate ?? 0,
+        jamban_count: fData?.jamban_count ?? 0,
+        stbm_rate: fData?.stbm_rate ?? 0,
+        stbm_count: fData?.stbm_count ?? 0,
+      };
+    });
+
   // Grouped Factors for display
   const factorGroups = [
     {
@@ -278,6 +400,121 @@ export default function RegionDetailPage() {
     }
   ];
 
+  const renderChartLines = () => {
+    switch (activeTrendTab) {
+      case 'prevalence':
+        return (
+          <>
+            <Line yAxisId="left" type="monotone" dataKey="prevalence" name={lang === 'id' ? 'Prevalensi (%)' : 'Prevalence (%)'} stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line yAxisId="right" type="monotone" dataKey="cases" name={lang === 'id' ? 'Jumlah Kasus' : 'Total Cases'} stroke="#f97316" strokeWidth={3} activeDot={{ r: 8 }} />
+          </>
+        );
+      case 'direct_risk':
+        return (
+          <>
+            <Line type="monotone" dataKey="bblr_rate" name={lang === 'id' ? 'BBLR (%)' : 'LBW (%)'} stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="imd_rate" name={lang === 'id' ? 'IMD (%)' : 'EIB (%)'} stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="asi_rate" name={lang === 'id' ? 'ASI Eksklusif (%)' : 'Exclusive Breastfeeding (%)'} stroke="#8b5cf6" strokeWidth={3} activeDot={{ r: 8 }} />
+          </>
+        );
+      case 'prevention_risk':
+        return (
+          <>
+            <Line type="monotone" dataKey="idl_rate" name={lang === 'id' ? 'Imunisasi Lengkap (%)' : 'Basic Immunization (%)'} stroke="#f59e0b" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="vita_rate" name={lang === 'id' ? 'Vitamin A (%)' : 'Vitamin A (%)'} stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+          </>
+        );
+      case 'maternal_risk':
+        return (
+          <>
+            <Line type="monotone" dataKey="ttd_rate" name={lang === 'id' ? 'TTD 90 Tablet (%)' : 'BAT 90 Tablets (%)'} stroke="#ec4899" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="catin_rate" name={lang === 'id' ? 'Layanan Catin (%)' : 'Bride Health (%)'} stroke="#8b5cf6" strokeWidth={3} activeDot={{ r: 8 }} />
+          </>
+        );
+      case 'environment_risk':
+        return (
+          <>
+            <Line type="monotone" dataKey="jamban_rate" name={lang === 'id' ? 'Jamban Sehat (%)' : 'Healthy Latrine (%)'} stroke="#06b6d4" strokeWidth={3} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="stbm_rate" name={lang === 'id' ? 'Stop BABS (%)' : 'Open Defecation Free (%)'} stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} />
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderTableContent = () => {
+    switch (activeTrendTab) {
+      case 'prevalence':
+        return {
+          headers: lang === 'id' 
+            ? ['Tahun', 'Prevalensi Stunting', 'Jumlah Kasus'] 
+            : ['Year', 'Stunting Prevalence', 'Total Cases'],
+          rows: yoyData.map(d => [
+            d.year,
+            `${d.prevalence}%`,
+            d.cases.toLocaleString()
+          ])
+        };
+      case 'direct_risk':
+        return {
+          headers: lang === 'id'
+            ? ['Tahun', 'BBLR (%)', 'BBLR (Kasus)', 'IMD (%)', 'IMD (Kasus)', 'ASI Ekskl. (%)', 'ASI (Kasus)']
+            : ['Year', 'LBW (%)', 'LBW (Cases)', 'EIB (%)', 'EIB (Cases)', 'ASI (%)', 'ASI (Cases)'],
+          rows: yoyData.map(d => [
+            d.year,
+            `${d.bblr_rate}%`,
+            d.bblr_count.toLocaleString(),
+            `${d.imd_rate}%`,
+            d.imd_count.toLocaleString(),
+            `${d.asi_rate}%`,
+            d.asi_count.toLocaleString()
+          ])
+        };
+      case 'prevention_risk':
+        return {
+          headers: lang === 'id'
+            ? ['Tahun', 'Imunisasi (%)', 'Imunisasi (Kasus)', 'Vitamin A (%)', 'Vitamin A (Kasus)']
+            : ['Year', 'Immunization (%)', 'Immunization (Cases)', 'Vitamin A (%)', 'Vitamin A (Cases)'],
+          rows: yoyData.map(d => [
+            d.year,
+            `${d.idl_rate}%`,
+            d.idl_count.toLocaleString(),
+            `${d.vita_rate}%`,
+            d.vita_count.toLocaleString()
+          ])
+        };
+      case 'maternal_risk':
+        return {
+          headers: lang === 'id'
+            ? ['Tahun', 'TTD 90 Tablet (%)', 'TTD (Kasus)', 'Layanan Catin (%)', 'Catin (Kasus)']
+            : ['Year', 'BAT 90 Tablets (%)', 'BAT (Cases)', 'Bride Services (%)', 'Bride (Cases)'],
+          rows: yoyData.map(d => [
+            d.year,
+            `${d.ttd_rate}%`,
+            d.ttd_count.toLocaleString(),
+            `${d.catin_rate}%`,
+            d.catin_count.toLocaleString()
+          ])
+        };
+      case 'environment_risk':
+        return {
+          headers: lang === 'id'
+            ? ['Tahun', 'Jamban Sehat (%)', 'Jamban (Kasus)', 'Stop BABS (%)', 'SBS (Kasus)']
+            : ['Year', 'Healthy Latrine (%)', 'Latrine (Cases)', 'ODF HH (%)', 'ODF (Cases)'],
+          rows: yoyData.map(d => [
+            d.year,
+            `${d.jamban_rate}%`,
+            d.jamban_count.toLocaleString(),
+            `${d.stbm_rate}%`,
+            d.stbm_count.toLocaleString()
+          ])
+        };
+      default:
+        return { headers: [], rows: [] };
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Header Section */}
@@ -298,6 +535,38 @@ export default function RegionDetailPage() {
                 <MapPin className="w-6 h-6 text-blue-600" />
                 {regionName}
               </h1>
+              {/* Cluster Badge */}
+              <div className="mt-2 flex items-center gap-2">
+                {isClusterLoading ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 animate-pulse">
+                    <div className="w-2 h-2 rounded-full bg-slate-300" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      {lang === 'id' ? 'Memuat kluster...' : 'Loading cluster...'}
+                    </span>
+                  </div>
+                ) : clusterInfo ? (
+                  <div
+                    className="flex items-center gap-2 px-3 py-1 rounded-full border font-black text-[10px] uppercase tracking-widest shadow-sm transition-all"
+                    style={{
+                      backgroundColor: `${clusterInfo.color}18`,
+                      borderColor: `${clusterInfo.color}55`,
+                      color: clusterInfo.color,
+                    }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: clusterInfo.color }}
+                    />
+                    {lang === 'id' ? 'Kluster Prevalensi' : 'Prevalence Cluster'}:
+                    <span className="font-black">{clusterInfo.label}</span>
+                    <span
+                      className="ml-1 opacity-60 font-bold text-[9px]"
+                    >
+                      ({activeYear})
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -359,7 +628,7 @@ export default function RegionDetailPage() {
 
             {/* AI Insight Section */}
             <div className="mt-4 pt-4 border-t border-slate-100 relative">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
                   <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
                     <LayoutDashboard className="w-4 h-4 text-blue-600" />
@@ -368,22 +637,44 @@ export default function RegionDetailPage() {
                   <p className="text-[10px] text-slate-500 font-bold tracking-wider mt-1">{t.mapDetail.aiStorytellingDesc}</p>
                 </div>
 
-                {!aiStory && !isAiLoading && (
-                  <button
-                    onClick={handleGenerateAiStory}
-                    className="group/btn flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl font-black text-[10px] tracking-widest hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 transform active:scale-95"
-                  >
-                    <Info className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
-                    {t.mapDetail.generateAnalysis}
-                  </button>
-                )}
-
-                {isAiLoading && (
-                  <div className="flex items-center gap-4 text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-[10px] font-black tracking-widest animate-pulse">{t.mapDetail.aiGenerating}</span>
+                {/* ── Model Selector (testing) ─────────────────── */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 bg-slate-100/80 border border-slate-200/70 rounded-xl px-3 py-1.5">
+                    <span className="text-[9px] font-black text-slate-400 tracking-widest uppercase">Model</span>
+                    <select
+                      id="ai-model-selector"
+                      value={selectedModel}
+                      onChange={(e) => {
+                        setSelectedModel(e.target.value);
+                        setAiStory(null);
+                        setSectorStories({});
+                        setSectorUsedModels({});
+                      }}
+                      className="bg-transparent text-[10px] font-black text-slate-600 outline-none cursor-pointer pr-1"
+                    >
+                      {AI_MODELS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
+
+                  {!aiStory && !isAiLoading && (
+                    <button
+                      onClick={handleGenerateAiStory}
+                      className="group/btn flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl font-black text-[10px] tracking-widest hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 transform active:scale-95"
+                    >
+                      <Info className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+                      {t.mapDetail.generateAnalysis}
+                    </button>
+                  )}
+
+                  {isAiLoading && (
+                    <div className="flex items-center gap-4 text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[10px] font-black tracking-widest animate-pulse">{t.mapDetail.aiGenerating}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {aiStory && (
@@ -566,12 +857,22 @@ export default function RegionDetailPage() {
                             <p className="text-base text-slate-600 font-medium leading-relaxed italic">
                               "{renderFormattedText(sectorStories[group.title])}"
                             </p>
-                            <button
-                              onClick={() => handleGenerateSectorStory(group.title, group.items)}
-                              className="mt-2 text-[12px] font-black text-blue-600 tracking-widest hover:underline"
-                            >
-                              {t.mapDetail.refreshAnalysis || (lang === 'id' ? 'Perbarui Analisis' : 'Refresh Analysis')}
-                            </button>
+                            <div className="flex items-center gap-3 mt-2 flex-wrap">
+                              <button
+                                onClick={() => handleGenerateSectorStory(group.title, group.items)}
+                                className="text-[12px] font-black text-blue-600 tracking-widest hover:underline"
+                              >
+                                {t.mapDetail.refreshAnalysis || (lang === 'id' ? 'Perbarui Analisis' : 'Refresh Analysis')}
+                              </button>
+                              {sectorUsedModels[group.title] && (
+                                <>
+                                  <span className="text-slate-300 text-[10px]">•</span>
+                                  <span className="text-[9px] font-bold text-slate-400 tracking-widest">
+                                    {t.mapDetail.modelInfo} {sectorUsedModels[group.title]}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -581,6 +882,226 @@ export default function RegionDetailPage() {
               );
             })}
 
+          </div>
+        </div>
+
+        {/* YoY Trend and History Analysis Section */}
+        <div className="space-y-8 mt-12">
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+              {lang === 'id' ? 'Analisis Tren Perkembangan Tahunan' : 'Annual Development Trend Analysis'}
+            </h2>
+            <div className="flex-1 h-px bg-gray-100"></div>
+          </div>
+
+          <div className="bg-white rounded-[3rem] p-8 border border-slate-200/60 shadow-2xl shadow-blue-900/5 flex flex-col gap-6">
+            {/* Header: Title, Subtitle & Minimize button */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-black text-gray-900 tracking-tight mb-1 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                  {lang === 'id' ? 'Grafik Perkembangan Multi-Tahun' : 'Multi-Year Development Chart'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {lang === 'id' 
+                    ? 'Perbandingan tren prevalensi stunting dan faktor-faktor risiko determinan secara historis' 
+                    : 'Historical comparison of stunting prevalence trends and determining risk factors'}
+                </p>
+              </div>
+
+              {/* Table Toggle Button */}
+              <button
+                onClick={() => setIsTableMinimized(!isTableMinimized)}
+                className="flex items-center justify-center gap-2 self-start px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-all font-black text-[10px] tracking-widest uppercase"
+              >
+                <Table className="w-3.5 h-3.5" />
+                {isTableMinimized 
+                  ? (lang === 'id' ? 'Tampilkan Tabel Ringkasan' : 'Show Summary Table') 
+                  : (lang === 'id' ? 'Sembunyikan Tabel' : 'Hide Table')}
+              </button>
+            </div>
+
+            {/* Tab switchers */}
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {[
+                { id: 'prevalence', label: lang === 'id' ? 'Prevalensi Stunting' : 'Stunting Prevalence', color: 'text-blue-600', activeBg: 'bg-blue-50', border: 'border-blue-100' },
+                { id: 'direct_risk', label: lang === 'id' ? 'Risiko Langsung' : 'Direct Risk', color: 'text-orange-600', activeBg: 'bg-orange-50', border: 'border-orange-100' },
+                { id: 'prevention_risk', label: lang === 'id' ? 'Pencegahan Efektif' : 'Effective Prevention', color: 'text-emerald-600', activeBg: 'bg-emerald-50', border: 'border-emerald-100' },
+                { id: 'maternal_risk', label: lang === 'id' ? 'Kesehatan Ibu' : 'Maternal Health', color: 'text-rose-600', activeBg: 'bg-rose-50', border: 'border-rose-100' },
+                { id: 'environment_risk', label: lang === 'id' ? 'Kesehatan Lingkungan' : 'Environmental Health', color: 'text-cyan-600', activeBg: 'bg-cyan-50', border: 'border-cyan-100' },
+              ].map((tab) => {
+                const isActive = activeTrendTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTrendTab(tab.id as any)}
+                    className={`px-4 py-2.5 rounded-xl text-[11px] font-black tracking-wider uppercase transition-all whitespace-nowrap border ${
+                      isActive 
+                        ? `${tab.activeBg} ${tab.color} ${tab.border} shadow-sm font-extrabold` 
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Split layout (Chart & Table) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+              {/* Chart container */}
+              <div className={`transition-all duration-300 ${isTableMinimized ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
+                <div className="w-full h-[320px] pr-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={yoyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="year" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
+                        dy={10}
+                      />
+                      <YAxis 
+                        yAxisId="left" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
+                        domain={activeTrendTab === 'prevalence' ? [0, 'auto'] : [0, 100]}
+                        unit={activeTrendTab === 'prevalence' ? '' : '%'}
+                      />
+                      {activeTrendTab === 'prevalence' && (
+                        <YAxis 
+                          yAxisId="right" 
+                          orientation="right"
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 700 }}
+                        />
+                      )}
+                      <RechartsTooltip 
+                        contentStyle={{ 
+                          borderRadius: '16px', 
+                          border: 'none', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                          padding: '12px'
+                        }}
+                        itemStyle={{ fontWeight: 800, fontSize: '12px' }}
+                        labelStyle={{ fontWeight: 800, fontSize: '10px', color: '#94a3b8', marginBottom: '4px', textTransform: 'uppercase' }}
+                      />
+                      <Legend 
+                        verticalAlign="top" 
+                        height={36} 
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ fontSize: '11px', fontWeight: 800 }}
+                      />
+                      {renderChartLines()}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Summary Table container */}
+              {!isTableMinimized && (
+                <div className="lg:col-span-1 space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">
+                      {lang === 'id' ? 'Ringkasan Data Historis' : 'Historical Data Summary'}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-sm">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          {renderTableContent()?.headers.map((h, i) => (
+                            <th key={i} className="px-3 py-2.5 font-black text-slate-500 uppercase tracking-wider text-[9px]">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {renderTableContent()?.rows.map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors">
+                            {row.map((val, cIdx) => (
+                              <td key={cIdx} className={`px-3 py-2.5 font-bold ${cIdx === 0 ? 'text-blue-600' : 'text-slate-700'}`}>
+                                {val}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* YoY AI Storytelling Section */}
+            <div className="mt-4 pt-6 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+                  {lang === 'id' ? 'Analisis Tren Berbasis AI' : 'AI-Based Trend Analysis'}
+                </h4>
+                
+                {!yoyStory && !isYoyLoading && (
+                  <button
+                    onClick={handleGenerateYoyStory}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-black text-[10px] tracking-widest uppercase shadow-md shadow-blue-500/10 self-start sm:self-auto"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {lang === 'id' ? 'Mulai Analisis AI' : 'Generate AI Analysis'}
+                  </button>
+                )}
+              </div>
+
+              {isYoyLoading && (
+                <div className="flex items-center justify-center gap-3 py-10 text-blue-600 animate-pulse bg-slate-50/50 rounded-[2rem] border border-slate-100">
+                  <div className="w-5 h-5 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.mapDetail.craftingNarrative}</span>
+                </div>
+              )}
+
+              {yoyStory && !isYoyLoading && (
+                <div className="bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100 relative group/story animate-in fade-in duration-500">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500 shadow-md flex items-center justify-center text-white border border-white">
+                        <Sparkles className="w-4 h-4 animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base text-slate-700 font-medium leading-relaxed italic md:pr-20">
+                        "{renderFormattedText(yoyStory)}"
+                      </p>
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <p className="text-[9px] font-bold text-slate-400 tracking-widest">
+                          {t.mapDetail.modelInfo} {yoyUsedModel || 'Gemini'} • {lang === 'id' ? 'Bahasa Indonesia' : 'English'}
+                        </p>
+                        <button
+                          onClick={handleGenerateYoyStory}
+                          className="text-[9px] font-black text-blue-600 tracking-widest hover:underline decoration-2 underline-offset-4 transition-all"
+                        >
+                          {t.common.updateAnalysis}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!yoyStory && !isYoyLoading && (
+                <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
+                  <Info className="w-8 h-8 text-slate-200 mb-2" />
+                  <p className="text-[11px] font-bold text-slate-400 tracking-widest text-center leading-relaxed">
+                    {lang === 'id' ? 'Klik tombol di atas untuk mendapatkan narasi analisis tren perkembangan' : 'Click the button above to generate a developmental trend narrative'}<br />{lang === 'id' ? 'stunting secara otomatis berbasis AI' : 'automatically powered by AI'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
